@@ -27,6 +27,10 @@ See [LICENSE](./LICENSE).
 ![Terminal demo](./docs/demo-terminal.png)
 ![Citation picker demo](./docs/demo-citation.png)
 -->
+<img width="1910" height="1131" alt="image 2 1" src="https://github.com/user-attachments/assets/5ca41d1e-311d-4624-a91e-3c8df7bbadba" />
+
+
+
 
 ## Download
 

@@ -1,0 +1,380 @@
+.xterm {
+  cursor: text;
+  position: relative;
+  user-select: none;
+}
+
+.xterm:focus,
+.xterm.focus {
+  outline: none;
+}
+
+.xterm .xterm-helpers {
+  position: absolute;
+  top: 0;
+  z-index: 5;
+}
+
+.xterm .xterm-helper-textarea {
+  border: 0;
+  height: 0;
+  left: -9999em;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  resize: none;
+  top: 0;
+  white-space: nowrap;
+  width: 0;
+  z-index: -5;
+}
+
+.xterm .xterm-viewport {
+  background: var(--background-primary);
+  bottom: 0;
+  cursor: default;
+  left: 0;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  scrollbar-width: none;
+  top: 0;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar,
+.vin-terminal-tabs-scroll::-webkit-scrollbar,
+.vin-terminal-citation-list::-webkit-scrollbar {
+  display: none;
+}
+
+.xterm .xterm-screen {
+  position: relative;
+}
+
+.xterm .xterm-screen canvas {
+  left: 0;
+  position: absolute;
+  top: 0;
+}
+
+.xterm-char-measure-element {
+  display: inline-block;
+  left: -9999em;
+  line-height: normal;
+  position: absolute;
+  top: 0;
+  visibility: hidden;
+}
+
+.vin-terminal-container {
+  background: var(--background-primary);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.vin-terminal-tab-bar {
+  align-items: center;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  left: 0;
+  padding: 12px 16px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateY(-100%);
+  transition: transform 140ms ease, opacity 140ms ease;
+  z-index: 30;
+  opacity: 0;
+}
+
+.vin-terminal-container.is-toolbar-visible .vin-terminal-tab-bar,
+.vin-terminal-tab-bar:focus-within {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.vin-terminal-tabs-scroll {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.vin-terminal-tab-controls {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.vin-terminal-tab,
+.vin-terminal-tab-new,
+.vin-terminal-tab-help {
+  align-items: center;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-interface);
+  font-size: 12px;
+  font-weight: 450;
+  justify-content: center;
+  letter-spacing: 0;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.vin-terminal-tab {
+  gap: 6px;
+  max-width: 220px;
+  min-height: 34px;
+  padding: 8px 14px;
+}
+
+.vin-terminal-tab-new,
+.vin-terminal-tab-help {
+  height: 34px;
+  width: 34px;
+}
+
+.vin-terminal-tab:hover,
+.vin-terminal-tab-new:hover,
+.vin-terminal-tab-help:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+  color: var(--text-normal);
+}
+
+.vin-terminal-tab.is-active {
+  background: var(--background-secondary);
+  border-color: var(--background-modifier-border-hover, var(--background-modifier-border));
+  color: var(--text-normal);
+}
+
+.vin-terminal-tab.has-activity {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+}
+
+.vin-terminal-tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vin-terminal-tab-rename,
+.vin-terminal-container input[type="text"].vin-terminal-tab-rename {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--interactive-accent);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--text-normal);
+  font: inherit;
+  margin: 0;
+  min-width: 5ch;
+  outline: none;
+  padding: 0;
+}
+
+.vin-terminal-sessions {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  padding-top: 0;
+  transition: padding-top 140ms ease;
+}
+
+.vin-terminal-container.is-toolbar-visible .vin-terminal-sessions {
+  padding-top: 62px;
+}
+
+.vin-terminal-session {
+  background: var(--background-primary);
+  display: none;
+  inset: 0;
+  padding: 16px 18px 20px;
+  position: absolute;
+}
+
+.vin-terminal-session.is-active {
+  display: block;
+}
+
+.vin-terminal-host,
+.vin-terminal-host .xterm {
+  height: 100%;
+  width: 100%;
+}
+
+.vin-terminal-host {
+  isolation: isolate;
+  text-rendering: auto;
+  -moz-osx-font-smoothing: auto;
+  -webkit-font-smoothing: auto;
+}
+
+.vin-terminal-host .xterm {
+  text-rendering: auto;
+  line-height: normal;
+}
+
+.vin-terminal-host .xterm-viewport {
+  overflow-y: auto !important;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+.vin-terminal-host .xterm-rows {
+  padding-top: 2px;
+}
+
+.vin-terminal-host .xterm-screen canvas {
+  image-rendering: auto;
+  text-rendering: auto;
+}
+
+@media (max-width: 720px) {
+  .vin-terminal-tab-bar {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .vin-terminal-tab,
+  .vin-terminal-tab-new,
+  .vin-terminal-tab-help {
+    font-size: 11px;
+  }
+
+  .vin-terminal-tab {
+    min-height: 32px;
+    padding: 7px 12px;
+  }
+
+  .vin-terminal-session {
+    padding: 12px;
+  }
+}
+
+.vin-terminal-dropzone {
+  align-items: center;
+  backdrop-filter: blur(6px);
+  background: color-mix(in srgb, var(--background-primary) 78%, transparent);
+  border: 2px dashed var(--interactive-accent);
+  border-radius: 16px;
+  display: flex;
+  inset: 16px;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 140ms ease;
+  z-index: 10;
+}
+
+.vin-terminal-dropzone.is-visible {
+  opacity: 1;
+}
+
+.vin-dropzone-label {
+  color: var(--interactive-accent);
+  font-family: var(--font-interface);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.vin-terminal-citation-dropdown {
+  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--background-secondary) 88%, transparent);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-s);
+  max-height: 280px;
+  overflow: hidden;
+  position: absolute;
+  right: 24px;
+  top: 24px;
+  width: min(360px, calc(100% - 48px));
+  z-index: 20;
+}
+
+.vin-terminal-citation-header {
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  padding: 12px 14px;
+}
+
+.vin-terminal-citation-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 230px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.vin-terminal-citation-item {
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  transition: background 120ms ease;
+}
+
+.vin-terminal-citation-item:hover,
+.vin-terminal-citation-item.is-selected {
+  background: color-mix(in srgb, var(--interactive-accent) 10%, var(--background-modifier-hover));
+}
+
+.vin-terminal-citation-name {
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.vin-terminal-citation-path,
+.vin-terminal-citation-empty {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.vin-terminal-citation-empty {
+  padding: 12px;
+}
+
+.vin-terminal-help-modal h3 {
+  margin-top: 0;
+}
+
+.vin-terminal-help-modal table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.vin-terminal-help-modal td {
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 13px;
+  padding: 8px 0;
+  vertical-align: top;
+}
+
+.vin-terminal-help-modal td:first-child {
+  color: var(--text-accent);
+  font-family: var(--font-monospace);
+  padding-right: 16px;
+  white-space: nowrap;
+  width: 110px;
+}

@@ -1,0 +1,24 @@
+{
+  "name": "obsidian-embedded-ai-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Obsidian plugin that embeds AI coding CLIs inside a dockable terminal view.",
+  "main": "main.js",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "dev": "node esbuild.config.mjs --watch",
+    "postinstall": "node scripts/patch-node-pty-winpty.js",
+    "package:release": "node scripts/package-release.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "esbuild": "^0.25.1",
+    "obsidian": "^1.8.9",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
+  }
+}

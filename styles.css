@@ -369,7 +369,7 @@
 .vin-terminal-empty-state {
   align-items: center;
   background: color-mix(in srgb, var(--background-primary) 92%, transparent);
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 8px;
   inset: 0;

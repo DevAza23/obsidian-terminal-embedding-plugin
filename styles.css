@@ -196,6 +196,137 @@
   transition: padding-top 140ms ease;
 }
 
+.vin-terminal-diagnostics {
+  background: color-mix(in srgb, var(--background-secondary) 92%, transparent);
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  padding: 12px 16px;
+}
+
+.vin-terminal-diagnostics-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.vin-terminal-diagnostics-title-wrap {
+  min-width: 0;
+}
+
+.vin-terminal-diagnostics-title {
+  color: var(--text-normal);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vin-terminal-diagnostics-subtitle {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.vin-terminal-diagnostics-clear {
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-interface);
+  font-size: 11px;
+  line-height: 1;
+  margin: 0;
+  padding: 7px 10px;
+}
+
+.vin-terminal-diagnostics-clear:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.vin-terminal-diagnostics-list {
+  display: grid;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.vin-terminal-diagnostic {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.vin-terminal-diagnostic.is-error {
+  border-color: color-mix(in srgb, var(--color-red, #d9534f) 35%, var(--background-modifier-border));
+}
+
+.vin-terminal-diagnostic.is-warning {
+  border-color: color-mix(in srgb, var(--color-yellow, #d5b65a) 35%, var(--background-modifier-border));
+}
+
+.vin-terminal-diagnostic-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.vin-terminal-diagnostic-badge {
+  background: var(--background-modifier-hover);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 7px;
+  text-transform: uppercase;
+}
+
+.vin-terminal-diagnostic.is-error .vin-terminal-diagnostic-badge {
+  background: color-mix(in srgb, var(--color-red, #d9534f) 16%, transparent);
+  color: var(--color-red, #d9534f);
+}
+
+.vin-terminal-diagnostic.is-warning .vin-terminal-diagnostic-badge {
+  background: color-mix(in srgb, var(--color-yellow, #d5b65a) 18%, transparent);
+  color: color-mix(in srgb, var(--color-yellow, #d5b65a) 82%, var(--text-normal));
+}
+
+.vin-terminal-diagnostic-scope {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: lowercase;
+}
+
+.vin-terminal-diagnostic-time {
+  color: var(--text-faint);
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.vin-terminal-diagnostic-summary {
+  color: var(--text-normal);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.vin-terminal-diagnostic-detail {
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  padding: 0;
+  white-space: pre-wrap;
+}
+
 .vin-terminal-container.is-toolbar-visible .vin-terminal-sessions {
   padding-top: 62px;
 }
@@ -210,6 +341,78 @@
 
 .vin-terminal-session.is-active {
   display: block;
+}
+
+.vin-terminal-session-status {
+  align-items: center;
+  background: color-mix(in srgb, var(--background-primary) 86%, transparent);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  color: var(--text-muted);
+  display: none;
+  font-family: var(--font-interface);
+  font-size: 12px;
+  justify-content: center;
+  left: 50%;
+  max-width: min(420px, calc(100% - 48px));
+  padding: 10px 14px;
+  position: absolute;
+  top: 18px;
+  transform: translateX(-50%);
+  z-index: 12;
+}
+
+.vin-terminal-session-status.is-visible {
+  display: flex;
+}
+
+.vin-terminal-empty-state {
+  align-items: center;
+  background: color-mix(in srgb, var(--background-primary) 92%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: absolute;
+  text-align: center;
+  z-index: 11;
+}
+
+.vin-terminal-empty-title {
+  color: var(--text-normal);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.vin-terminal-empty-description {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+.vin-terminal-empty-actions {
+  margin-top: 6px;
+}
+
+.vin-terminal-empty-button {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-family: var(--font-interface);
+  font-size: 12px;
+  line-height: 1;
+  margin: 0;
+  padding: 10px 14px;
+}
+
+.vin-terminal-empty-button:hover {
+  background: var(--background-modifier-hover);
 }
 
 .vin-terminal-host,

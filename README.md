@@ -4,6 +4,16 @@ An Obsidian desktop plugin that embeds a real terminal inside a pane, with suppo
 
 The plugin is Windows-first and uses a PTY-backed terminal UI inside Obsidian.
 
+## Latest Release
+
+`0.1.1 - Pane Recovery`
+
+Short release name:
+
+`Pane Recovery`
+
+This patch fixes a blank terminal pane issue and adds visible diagnostics for session startup problems.
+
 ## License
 
 This project is open source under the MIT license.
@@ -45,6 +55,32 @@ Users can then:
    `.obsidian/plugins/embedded-ai-terminal/`
 3. Restart Obsidian or reload community plugins
 4. Enable `Embedded AI Terminal` in `Settings -> Community plugins`
+
+## Updating
+
+When shipping an update, replace the installed plugin files in:
+
+`.obsidian/plugins/embedded-ai-terminal/`
+
+At minimum update:
+
+- `main.js`
+- `styles.css`
+- `manifest.json`
+- `versions.json`
+
+If the release includes native dependency changes, also replace:
+
+- `node_modules/`
+
+After copying the new files:
+
+1. Reload community plugins or restart Obsidian
+2. Re-open the `Embedded AI Terminal` pane
+
+Do not install the plugin into a random folder name like `New folder`. The installed folder should match the plugin id:
+
+`.obsidian/plugins/embedded-ai-terminal/`
 
 ## Manual Install
 
@@ -157,9 +193,41 @@ Then package the installable plugin folder or zip:
 - `versions.json`
 - `node_modules/`
 
+Recommended release asset:
+
+- `embedded-ai-terminal.zip`
+
+Recommended release title:
+
+- `0.1.1 - Pane Recovery`
+
+Recommended short summary:
+
+- Fixes a blank terminal pane on startup and adds visible diagnostics for terminal session failures.
+
 ## Notes
 
 - This plugin currently targets desktop Obsidian.
 - The terminal implementation is Windows-first.
 - If native module loading fails in Obsidian, verify that the installed plugin folder contains `node_modules/node-pty`.
+
+## Troubleshooting
+
+### Blank terminal pane
+
+If the pane opens but looks empty:
+
+1. Make sure the plugin is installed in:
+   `.obsidian/plugins/embedded-ai-terminal/`
+2. Confirm the folder contains:
+   `manifest.json`, `main.js`, `styles.css`, `versions.json`, and `node_modules/`
+3. Reload community plugins or restart Obsidian
+4. Open the terminal pane again and check the in-pane diagnostics section
+
+### Native module issues
+
+If `node-pty` fails to load:
+
+- verify that `node_modules/node-pty/` exists in the installed plugin folder
+- reinstall or replace the packaged plugin files instead of copying only `main.js`
 

@@ -22,6 +22,17 @@ interface ViewStatePayload {
   nextId: number;
 }
 
+type DiagnosticLevel = "error" | "warning" | "info";
+
+interface DiagnosticEntry {
+  id: number;
+  timestamp: number;
+  level: DiagnosticLevel;
+  scope: string;
+  summary: string;
+  detail: string;
+}
+
 interface EmbeddedTerminalSettings {
   shellPath: string;
   shellArgs: string;
@@ -142,6 +153,41 @@ function getTerminalTheme(): NonNullable<Terminal["options"]["theme"]> {
     brightCyan: "#68d4ea",
     brightWhite: isDark ? "#f8f9fb" : "#ffffff",
   };
+}
+
+function formatDiagnosticTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack || `${error.name}: ${error.message}`;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error, null, 2);
+  } catch {
+    return String(error);
+  }
+}
+
+function formatDiagnosticContext(context?: Record<string, string>): string {
+  if (!context) {
+    return "";
+  }
+
+  return Object.entries(context)
+    .filter(([, value]) => value.trim().length > 0)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("\n");
 }
 
 function escapeForPowerShell(path: string): string {
@@ -397,6 +443,7 @@ class FileCitationAutocomplete {
 class TerminalSession {
   readonly containerEl: HTMLElement;
   readonly hostEl: HTMLElement;
+  readonly statusEl: HTMLElement;
   readonly fitAddon = new FitAddon();
   readonly term: Terminal;
   readonly ptyProcess: IPty;
@@ -404,6 +451,8 @@ class TerminalSession {
   name: string;
   hasActivity = false;
   private disposed = false;
+  private hasReceivedOutput = false;
+  private startupWarningTimer: number | null = null;
 
   constructor(
     private readonly plugin: EmbeddedAiTerminalPlugin,
@@ -416,89 +465,141 @@ class TerminalSession {
     this.name = makeSessionLabel(profileId, id);
     this.containerEl = this.view.sessionsEl.createDiv({ cls: "vin-terminal-session" });
     this.hostEl = this.containerEl.createDiv({ cls: "vin-terminal-host" });
+    this.statusEl = this.containerEl.createDiv({ cls: "vin-terminal-session-status" });
+    this.setStatus(`Starting ${this.name}...`);
+    try {
+      this.term = new Terminal({
+        allowTransparency: false,
+        convertEol: true,
+        cursorBlink: this.plugin.settings.cursorBlink,
+        customGlyphs: false,
+        fontFamily: getTerminalFontFamily(),
+        fontSize: this.plugin.settings.fontSize,
+        fontWeight: "400",
+        fontWeightBold: "700",
+        letterSpacing: 0.15,
+        lineHeight: 1.24,
+        minimumContrastRatio: 1,
+        rescaleOverlappingGlyphs: false,
+        scrollback: 8000,
+        theme: getTerminalTheme(),
+      });
+      this.term.loadAddon(this.fitAddon);
+      this.term.open(this.hostEl);
 
-    this.term = new Terminal({
-      allowTransparency: false,
-      convertEol: true,
-      cursorBlink: this.plugin.settings.cursorBlink,
-      customGlyphs: false,
-      fontFamily: getTerminalFontFamily(),
-      fontSize: this.plugin.settings.fontSize,
-      fontWeight: "400",
-      fontWeightBold: "700",
-      letterSpacing: 0.15,
-      lineHeight: 1.24,
-      minimumContrastRatio: 1,
-      rescaleOverlappingGlyphs: false,
-      scrollback: 8000,
-      theme: getTerminalTheme(),
-    });
-    this.term.loadAddon(this.fitAddon);
-    this.term.open(this.hostEl);
+      const nodePty = loadNodePty(this.plugin);
 
-    const nodePty = loadNodePty(this.plugin);
+      this.ptyProcess = nodePty.spawn(this.plugin.settings.shellPath, parseArgs(this.plugin.settings.shellArgs), {
+        cols: 80,
+        cwd: this.cwd,
+        env: {
+          ...process.env,
+          TERM: "xterm-256color",
+        },
+        name: "xterm-color",
+        rows: 24,
+        // Obsidian's renderer can reject worker_threads-backed ConPTY.
+        // Force winpty on Windows to avoid startup failure inside Electron.
+        useConpty: false,
+      });
 
-    this.ptyProcess = nodePty.spawn(this.plugin.settings.shellPath, parseArgs(this.plugin.settings.shellArgs), {
-      cols: 80,
-      cwd: this.cwd,
-      env: {
-        ...process.env,
-        TERM: "xterm-256color",
-      },
-      name: "xterm-color",
-      rows: 24,
-      // Obsidian's renderer can reject worker_threads-backed ConPTY.
-      // Force winpty on Windows to avoid startup failure inside Electron.
-      useConpty: false,
-    });
+      this.citationAutocomplete = new FileCitationAutocomplete(
+        this.plugin.app,
+        this.term,
+        (data) => this.ptyProcess.write(data),
+        this.containerEl,
+      );
 
-    this.citationAutocomplete = new FileCitationAutocomplete(
-      this.plugin.app,
-      this.term,
-      (data) => this.ptyProcess.write(data),
-      this.containerEl,
-    );
+      this.term.onData((data) => {
+        this.citationAutocomplete.handleData(data);
+        this.ptyProcess.write(data);
+      });
 
-    this.term.onData((data) => {
-      this.citationAutocomplete.handleData(data);
-      this.ptyProcess.write(data);
-    });
+      this.ptyProcess.onData((data) => {
+        if (!this.hasReceivedOutput) {
+          this.hasReceivedOutput = true;
+          this.clearStartupWarningTimer();
+          this.statusEl.removeClass("is-visible");
+          this.statusEl.empty();
+        }
+        this.term.write(data);
+        if (this.view.activeSession !== this && !this.hasActivity) {
+          this.hasActivity = true;
+          this.view.renderTabs();
+        }
+      });
 
-    this.ptyProcess.onData((data) => {
-      this.term.write(data);
-      if (this.view.activeSession !== this && !this.hasActivity) {
-        this.hasActivity = true;
-        this.view.renderTabs();
-      }
-    });
+      this.ptyProcess.onExit(({ exitCode }) => {
+        if (this.disposed) {
+          return;
+        }
 
-    this.ptyProcess.onExit(({ exitCode }) => {
-      this.term.write(`\r\n[process exited with code ${exitCode}]\r\n`);
-    });
+        this.term.write(`\r\n[process exited with code ${exitCode}]\r\n`);
+        if (exitCode !== 0) {
+          this.plugin.recordDiagnostic({
+            level: "warning",
+            scope: "process-exit",
+            summary: `${this.name} exited with code ${exitCode}.`,
+            detail: formatDiagnosticContext({
+              profile: this.profileId,
+              shellPath: this.plugin.settings.shellPath,
+              shellArgs: this.plugin.settings.shellArgs,
+              cwd: this.cwd,
+              startupCommand: this.startupCommand,
+            }),
+          });
+        }
+      });
 
-    this.installDropHandlers();
+      this.installDropHandlers();
+      this.startupWarningTimer = window.setTimeout(() => {
+        if (this.disposed || this.hasReceivedOutput) {
+          return;
+        }
 
-    requestAnimationFrame(() => {
-      this.fit();
-      this.focus();
-      const startupLines = [
-        ...this.plugin.settings.startupLines.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-        ...this.startupCommand.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-      ];
-      if (startupLines.length) {
-        window.setTimeout(() => {
-          for (const line of startupLines) {
-            this.sendText(line);
-          }
-        }, 80);
-      }
-    });
+        this.setStatus("Waiting for terminal output...");
+        this.plugin.recordDiagnostic({
+          level: "warning",
+          scope: "session-startup",
+          summary: `${this.name} started but has not produced output yet.`,
+          context: {
+            profile: this.profileId,
+            pid: String(this.ptyProcess.pid),
+            shellPath: this.plugin.settings.shellPath,
+            shellArgs: this.plugin.settings.shellArgs,
+            cwd: this.cwd,
+            startupCommand: this.startupCommand,
+          },
+        });
+      }, 2200);
 
-    window.setTimeout(() => {
-      if (!this.disposed) {
+      requestAnimationFrame(() => {
         this.fit();
-      }
-    }, 180);
+        this.focus();
+        const startupLines = [
+          ...this.plugin.settings.startupLines.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+          ...this.startupCommand.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
+        ];
+        if (startupLines.length) {
+          window.setTimeout(() => {
+            for (const line of startupLines) {
+              this.sendText(line);
+            }
+          }, 80);
+        }
+      });
+
+      window.setTimeout(() => {
+        if (!this.disposed) {
+          this.fit();
+        }
+      }, 180);
+    } catch (error) {
+      this.clearStartupWarningTimer();
+      this.containerEl.remove();
+      this.term?.dispose();
+      throw error;
+    }
   }
 
   toState(): SavedSessionState {
@@ -632,10 +733,24 @@ class TerminalSession {
     }
 
     this.disposed = true;
+    this.clearStartupWarningTimer();
     this.citationAutocomplete.destroy();
     this.ptyProcess.kill();
     this.term.dispose();
     this.containerEl.remove();
+  }
+
+  private setStatus(text: string): void {
+    this.statusEl.empty();
+    this.statusEl.setText(text);
+    this.statusEl.addClass("is-visible");
+  }
+
+  private clearStartupWarningTimer(): void {
+    if (this.startupWarningTimer !== null) {
+      window.clearTimeout(this.startupWarningTimer);
+      this.startupWarningTimer = null;
+    }
   }
 }
 
@@ -645,12 +760,15 @@ class TerminalView extends ItemView {
   nextId = 1;
   tabBarEl!: HTMLElement;
   sessionsEl!: HTMLElement;
+  private emptyStateEl!: HTMLElement;
   private rootEl!: HTMLElement;
   private resizeObserver: ResizeObserver | null = null;
+  private diagnosticsEl!: HTMLElement;
   private pendingState: ViewStatePayload | null = null;
   private opened = false;
   private isRenaming = false;
   private toolbarVisible = false;
+  private unsubscribeDiagnostics: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: EmbeddedAiTerminalPlugin) {
     super(leaf);
@@ -685,7 +803,7 @@ class TerminalView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.opened = true;
-    const container = this.containerEl.children[1] as HTMLElement;
+    const container = this.contentEl;
     container.empty();
     container.addClass("vin-terminal-container");
     this.rootEl = container;
@@ -716,7 +834,12 @@ class TerminalView extends ItemView {
     });
 
     this.tabBarEl = container.createDiv({ cls: "vin-terminal-tab-bar" });
+    this.diagnosticsEl = container.createDiv({ cls: "vin-terminal-diagnostics" });
+    this.emptyStateEl = container.createDiv({ cls: "vin-terminal-empty-state" });
     this.sessionsEl = container.createDiv({ cls: "vin-terminal-sessions" });
+    this.unsubscribeDiagnostics = this.plugin.subscribeDiagnostics(() => this.renderDiagnostics());
+    this.renderDiagnostics();
+    this.renderEmptyState();
 
     this.resizeObserver = new ResizeObserver(() => {
       window.setTimeout(() => this.activeSession?.fit(), 50);
@@ -736,6 +859,7 @@ class TerminalView extends ItemView {
     } else {
       void this.createSession("shell");
     }
+    this.ensureSessionExists();
   }
 
   private toggleToolbar(): void {
@@ -747,11 +871,14 @@ class TerminalView extends ItemView {
   async onClose(): Promise<void> {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.unsubscribeDiagnostics?.();
+    this.unsubscribeDiagnostics = null;
     for (const session of this.sessions) {
       session.destroy();
     }
     this.sessions = [];
     this.activeSession = null;
+    this.renderEmptyState();
   }
 
   createSession(profileId: ProfileId, startupOverride?: string): TerminalSession | null {
@@ -763,13 +890,28 @@ class TerminalView extends ItemView {
       session = new TerminalSession(this.plugin, this, id, profileId, cwd, startupCommand);
     } catch (error) {
       this.nextId -= 1;
-      new Notice(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      this.plugin.recordDiagnostic({
+        level: "error",
+        scope: "session-create",
+        summary: `Failed to start ${makeSessionLabel(profileId, id)}.`,
+        error,
+        context: {
+          profile: profileId,
+          shellPath: this.plugin.settings.shellPath,
+          shellArgs: this.plugin.settings.shellArgs,
+          cwd,
+          startupCommand,
+        },
+      });
+      new Notice(message, 8000);
       return null;
     }
     session.name = makeSessionLabel(profileId, id);
     this.sessions.push(session);
     this.switchTo(session);
     this.renderTabs();
+    this.renderEmptyState();
     this.plugin.requestLayoutSave();
     return session;
   }
@@ -777,6 +919,7 @@ class TerminalView extends ItemView {
   switchTo(session: TerminalSession): void {
     if (this.activeSession === session) {
       session.focus();
+      this.renderEmptyState();
       return;
     }
 
@@ -784,6 +927,7 @@ class TerminalView extends ItemView {
     this.activeSession = session;
     session.show();
     this.renderTabs();
+    this.renderEmptyState();
     this.plugin.requestLayoutSave();
   }
 
@@ -805,11 +949,13 @@ class TerminalView extends ItemView {
     }
 
     if (!this.sessions.length) {
+      this.renderEmptyState("No terminal session.", "Trying to start a fresh shell...");
       void this.createSession("shell");
       return;
     }
 
     this.renderTabs();
+    this.renderEmptyState();
     this.plugin.requestLayoutSave();
   }
 
@@ -918,7 +1064,21 @@ class TerminalView extends ItemView {
           saved.startupCommand,
         );
       } catch (error) {
-        new Notice(`Failed to restore terminal tab "${saved.name}": ${error instanceof Error ? error.message : String(error)}`);
+        const message = error instanceof Error ? error.message : String(error);
+        this.plugin.recordDiagnostic({
+          level: "error",
+          scope: "session-restore",
+          summary: `Failed to restore terminal tab "${saved.name}".`,
+          error,
+          context: {
+            profile: saved.profileId,
+            shellPath: this.plugin.settings.shellPath,
+            shellArgs: this.plugin.settings.shellArgs,
+            cwd: saved.cwd || this.plugin.getDefaultCwd(),
+            startupCommand: saved.startupCommand,
+          },
+        });
+        new Notice(`Failed to restore terminal tab "${saved.name}": ${message}`, 8000);
         continue;
       }
       session.name = saved.name || makeSessionLabel(saved.profileId, saved.id);
@@ -932,7 +1092,107 @@ class TerminalView extends ItemView {
     }
 
     this.renderTabs();
+    this.renderEmptyState();
     this.pendingState = null;
+    this.ensureSessionExists();
+  }
+
+  private renderDiagnostics(): void {
+    if (!this.diagnosticsEl || !this.rootEl) {
+      return;
+    }
+
+    const entries = this.plugin.getDiagnostics();
+    this.diagnosticsEl.empty();
+
+    if (!entries.length) {
+      this.diagnosticsEl.hide();
+      this.rootEl.removeClass("has-diagnostics");
+      return;
+    }
+
+    this.rootEl.addClass("has-diagnostics");
+    this.diagnosticsEl.show();
+
+    const header = this.diagnosticsEl.createDiv({ cls: "vin-terminal-diagnostics-header" });
+    const titleWrap = header.createDiv({ cls: "vin-terminal-diagnostics-title-wrap" });
+    titleWrap.createDiv({ cls: "vin-terminal-diagnostics-title", text: "Terminal diagnostics" });
+    titleWrap.createDiv({
+      cls: "vin-terminal-diagnostics-subtitle",
+      text: `${entries.length} recent issue${entries.length === 1 ? "" : "s"} • latest ${formatDiagnosticTime(entries[0].timestamp)}`,
+    });
+
+    const clearButton = header.createEl("button", {
+      cls: "vin-terminal-diagnostics-clear",
+      text: "Clear",
+    });
+    clearButton.addEventListener("click", () => this.plugin.clearDiagnostics());
+
+    const list = this.diagnosticsEl.createDiv({ cls: "vin-terminal-diagnostics-list" });
+    for (const entry of entries.slice(0, 5)) {
+      const item = list.createDiv({ cls: `vin-terminal-diagnostic is-${entry.level}` });
+      const itemHeader = item.createDiv({ cls: "vin-terminal-diagnostic-header" });
+      itemHeader.createDiv({ cls: "vin-terminal-diagnostic-badge", text: entry.level });
+      itemHeader.createDiv({ cls: "vin-terminal-diagnostic-scope", text: entry.scope });
+      itemHeader.createDiv({ cls: "vin-terminal-diagnostic-time", text: formatDiagnosticTime(entry.timestamp) });
+      item.createDiv({ cls: "vin-terminal-diagnostic-summary", text: entry.summary });
+      if (entry.detail) {
+        item.createEl("pre", { cls: "vin-terminal-diagnostic-detail", text: entry.detail });
+      }
+    }
+  }
+
+  private ensureSessionExists(): void {
+    if (this.sessions.length > 0) {
+      this.renderEmptyState();
+      return;
+    }
+
+    window.setTimeout(() => {
+      if (!this.opened || this.sessions.length > 0) {
+        this.renderEmptyState();
+        return;
+      }
+
+      this.plugin.recordDiagnostic({
+        level: "warning",
+        scope: "empty-view",
+        summary: "Terminal view opened without an active session. Retrying shell startup.",
+      });
+      this.renderEmptyState("No active terminal session.", "Retrying shell startup...");
+      this.createSession("shell");
+    }, 50);
+  }
+
+  private renderEmptyState(title = "No active terminal session.", description = "Start a shell tab to attach a terminal."): void {
+    if (!this.emptyStateEl || !this.rootEl) {
+      return;
+    }
+
+    this.emptyStateEl.empty();
+    if (this.sessions.length > 0 || this.activeSession) {
+      this.emptyStateEl.hide();
+      this.rootEl.removeClass("has-empty-state");
+      return;
+    }
+
+    this.rootEl.addClass("has-empty-state");
+    this.emptyStateEl.show();
+    this.emptyStateEl.createDiv({ cls: "vin-terminal-empty-title", text: title });
+    this.emptyStateEl.createDiv({ cls: "vin-terminal-empty-description", text: description });
+    const actions = this.emptyStateEl.createDiv({ cls: "vin-terminal-empty-actions" });
+    const button = actions.createEl("button", {
+      cls: "vin-terminal-empty-button",
+      text: "Start shell",
+    });
+    button.addEventListener("click", () => {
+      this.plugin.recordDiagnostic({
+        level: "info",
+        scope: "empty-view",
+        summary: "Manual shell startup requested from empty terminal view.",
+      });
+      this.createSession("shell");
+    });
   }
 }
 
@@ -1074,6 +1334,9 @@ class EmbeddedTerminalSettingsTab extends PluginSettingTab {
 
 export default class EmbeddedAiTerminalPlugin extends Plugin {
   settings: EmbeddedTerminalSettings = structuredClone(DEFAULT_SETTINGS);
+  private diagnostics: DiagnosticEntry[] = [];
+  private nextDiagnosticId = 1;
+  private readonly diagnosticListeners = new Set<() => void>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -1171,6 +1434,54 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
     this.app.workspace.requestSaveLayout();
   }
 
+  getDiagnostics(): DiagnosticEntry[] {
+    return [...this.diagnostics];
+  }
+
+  subscribeDiagnostics(listener: () => void): () => void {
+    this.diagnosticListeners.add(listener);
+    return () => this.diagnosticListeners.delete(listener);
+  }
+
+  clearDiagnostics(): void {
+    this.diagnostics = [];
+    this.notifyDiagnosticsChanged();
+  }
+
+  recordDiagnostic(input: {
+    level: DiagnosticLevel;
+    scope: string;
+    summary: string;
+    detail?: string;
+    error?: unknown;
+    context?: Record<string, string>;
+  }): void {
+    const detail = [input.detail, formatDiagnosticContext(input.context), input.error ? formatUnknownError(input.error) : ""]
+      .filter((part) => part && part.trim().length > 0)
+      .join("\n\n");
+
+    this.diagnostics = [
+      {
+        id: this.nextDiagnosticId++,
+        timestamp: Date.now(),
+        level: input.level,
+        scope: input.scope,
+        summary: input.summary,
+        detail,
+      },
+      ...this.diagnostics,
+    ].slice(0, 20);
+
+    this.notifyDiagnosticsChanged();
+    if (input.level === "error") {
+      console.error(`[embedded-ai-terminal:${input.scope}] ${input.summary}\n${detail}`);
+    } else if (input.level === "warning") {
+      console.warn(`[embedded-ai-terminal:${input.scope}] ${input.summary}\n${detail}`);
+    } else {
+      console.info(`[embedded-ai-terminal:${input.scope}] ${input.summary}\n${detail}`);
+    }
+  }
+
   refreshSessions(): void {
     this.withActiveView((view) => {
       for (const session of view.sessions) {
@@ -1225,5 +1536,11 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
     await this.withEnsuredView((view) => {
       view.activeSession?.sendFilePaths(paths);
     });
+  }
+
+  private notifyDiagnosticsChanged(): void {
+    for (const listener of this.diagnosticListeners) {
+      listener();
+    }
   }
 }

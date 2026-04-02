@@ -1,6 +1,6 @@
 {
   "name": "obsidian-embedded-ai-terminal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Obsidian plugin that embeds AI coding CLIs inside a dockable terminal view.",
   "main": "main.js",

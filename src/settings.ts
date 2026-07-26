@@ -56,7 +56,6 @@ export class EmbeddedTerminalSettingsTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setHeading().setName("Shell");
     new Setting(containerEl)
       .setName("Shell executable")
       .setDesc("Executable launched inside each tab.")
@@ -131,7 +130,7 @@ export class EmbeddedTerminalSettingsTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl).setHeading().setName("Provider Commands");
+    new Setting(containerEl).setHeading().setName("Provider commands");
     this.renderCommandSetting(containerEl, "Codex", "codex");
     this.renderCommandSetting(containerEl, "Claude Code", "claude");
     this.renderCommandSetting(containerEl, "OpenCode", "opencode");

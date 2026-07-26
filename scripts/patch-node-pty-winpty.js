@@ -1,6 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+if (process.platform !== "win32") {
+  process.exit(0);
+}
+
 const targetPath = path.join(__dirname, "..", "node_modules", "node-pty", "lib", "windowsPtyAgent.js");
 
 if (!fs.existsSync(targetPath)) {

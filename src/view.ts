@@ -1,10 +1,9 @@
 import { ItemView, Menu, Modal, Notice, WorkspaceLeaf, type ViewStateResult } from "obsidian";
 import { formatDiagnosticTime } from "./diagnostics";
-import { makeSessionLabel } from "./platform";
-import { TerminalSession } from "./session";
+import { TerminalSession, makeSessionLabel } from "./session";
 import type EmbeddedAiTerminalPlugin from "./main";
 import type { ProfileId, ViewStatePayload } from "./types";
-import { VIEW_TYPE_EMBEDDED_AI_TERMINAL } from "./main";
+import { VIEW_TYPE_EMBEDDED_AI_TERMINAL } from "./constants";
 
 export class TerminalView extends ItemView {
   sessions: TerminalSession[] = [];
@@ -109,7 +108,7 @@ export class TerminalView extends ItemView {
     if (this.pendingState?.sessions?.length) {
       this.restoreState();
     } else {
-      void this.createSession("shell");
+      this.createSession("shell");
     }
     this.ensureSessionExists();
   }
@@ -202,11 +201,7 @@ export class TerminalView extends ItemView {
 
     if (!this.sessions.length) {
       this.renderEmptyState("No terminal session.", "Trying to start a fresh shell...");
-      void this.createSession("shell");
-      this.renderTabs();
-      this.renderEmptyState();
-      this.plugin.requestLayoutSave();
-      return;
+      this.createSession("shell");
     }
 
     this.renderTabs();
@@ -245,7 +240,7 @@ export class TerminalView extends ItemView {
 
     const newTab = tabsScroll.createDiv({ cls: "vin-terminal-tab-new", text: "+" });
     newTab.title = "New shell tab";
-    newTab.addEventListener("click", () => void this.createSession("shell"));
+    newTab.addEventListener("click", () => this.createSession("shell"));
 
     const controls = this.tabBarEl.createDiv({ cls: "vin-terminal-tab-controls" });
     const help = controls.createDiv({ cls: "vin-terminal-tab-help", text: "?" });
@@ -305,7 +300,8 @@ export class TerminalView extends ItemView {
     }
     this.sessions = [];
     this.activeSession = null;
-    this.nextId = this.pendingState.nextId;
+    const restoredIds = this.pendingState.sessions.map((session) => session.id);
+    this.nextId = Math.max(0, ...restoredIds) + 1;
 
     for (const saved of this.pendingState.sessions) {
       let session: TerminalSession;

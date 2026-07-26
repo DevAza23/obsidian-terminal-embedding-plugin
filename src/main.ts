@@ -4,9 +4,10 @@ import { EmbeddedTerminalSettingsTab, createDefaultSettings, normalizeSettings }
 import { DiagnosticsStore } from "./diagnostics";
 import { getVaultBase } from "./platform";
 import { TerminalView } from "./view";
+import { VIEW_TYPE_EMBEDDED_AI_TERMINAL } from "./constants";
 import type { DiagnosticEntry, DiagnosticLevel, EmbeddedTerminalSettings, ProfileId } from "./types";
 
-export const VIEW_TYPE_EMBEDDED_AI_TERMINAL = "embedded-ai-terminal-view";
+export { VIEW_TYPE_EMBEDDED_AI_TERMINAL } from "./constants";
 
 export default class EmbeddedAiTerminalPlugin extends Plugin {
   settings: EmbeddedTerminalSettings = createDefaultSettings();
@@ -34,22 +35,22 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
     this.addCommand({
       id: "new-shell-tab",
       name: "New shell terminal tab",
-      callback: () => void this.withEnsuredView((view) => void view.createSession("shell")),
+      callback: () => void this.withEnsuredView((view) => view.createSession("shell")),
     });
     this.addCommand({
       id: "new-codex-tab",
       name: "New Codex terminal tab",
-      callback: () => void this.withEnsuredView((view) => void view.createSession("codex")),
+      callback: () => void this.withEnsuredView((view) => view.createSession("codex")),
     });
     this.addCommand({
       id: "new-claude-tab",
       name: "New Claude terminal tab",
-      callback: () => void this.withEnsuredView((view) => void view.createSession("claude")),
+      callback: () => void this.withEnsuredView((view) => view.createSession("claude")),
     });
     this.addCommand({
       id: "new-opencode-tab",
       name: "New OpenCode terminal tab",
-      callback: () => void this.withEnsuredView((view) => void view.createSession("opencode")),
+      callback: () => void this.withEnsuredView((view) => view.createSession("opencode")),
     });
     this.addCommand({
       id: "send-current-file-path",

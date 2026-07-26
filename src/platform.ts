@@ -1,5 +1,4 @@
 import { App, FileSystemAdapter } from "obsidian";
-import type { IPty } from "node-pty";
 import * as nodePath from "node:path";
 import type EmbeddedAiTerminalPlugin from "./main";
 
@@ -88,23 +87,4 @@ export function loadNodePty(plugin: EmbeddedAiTerminalPlugin): NodePtyModule {
   }
 
   throw new Error(`Failed to load node-pty. Copy the plugin with its node_modules folder, or rebuild node-pty for Obsidian/Electron. ${failures.join(" | ")}`);
-}
-
-export function getTerminalFontFamily(): string {
-  return "var(--font-monospace), monospace";
-}
-
-export function makeSessionLabel(profileId: import("./types").ProfileId, id: number): string {
-  switch (profileId) {
-    case "codex":
-      return `Codex ${id}`;
-    case "claude":
-      return `Claude ${id}`;
-    case "opencode":
-      return `OpenCode ${id}`;
-    case "custom":
-      return `Custom ${id}`;
-    default:
-      return `Shell ${id}`;
-  }
 }

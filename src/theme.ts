@@ -1,5 +1,9 @@
 import type { Terminal } from "@xterm/xterm";
 
+export function getTerminalFontFamily(): string {
+  return "var(--font-monospace), monospace";
+}
+
 export function getTerminalTheme(element: HTMLElement): NonNullable<Terminal["options"]["theme"]> {
   const doc = element.ownerDocument;
   const styles = doc.defaultView?.getComputedStyle(doc.body);

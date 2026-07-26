@@ -3,11 +3,26 @@ import { Terminal } from "@xterm/xterm";
 import type { IPty, IDisposable } from "node-pty";
 import { FileCitationAutocomplete } from "./citation";
 import { formatDiagnosticContext } from "./diagnostics";
-import { getTerminalFontFamily, loadNodePty, makeSessionLabel, parseArgs, quotePath } from "./platform";
-import { getTerminalTheme } from "./theme";
+import { loadNodePty, parseArgs, quotePath } from "./platform";
+import { getTerminalFontFamily, getTerminalTheme } from "./theme";
 import type EmbeddedAiTerminalPlugin from "./main";
 import type { ProfileId, SavedSessionState } from "./types";
 import type { TerminalView } from "./view";
+
+export function makeSessionLabel(profileId: ProfileId, id: number): string {
+  switch (profileId) {
+    case "codex":
+      return `Codex ${id}`;
+    case "claude":
+      return `Claude ${id}`;
+    case "opencode":
+      return `OpenCode ${id}`;
+    case "custom":
+      return `Custom ${id}`;
+    default:
+      return `Shell ${id}`;
+  }
+}
 
 export class TerminalSession {
   readonly containerEl: HTMLElement;
@@ -42,8 +57,9 @@ export class TerminalSession {
     this.hostEl = this.containerEl.createDiv({ cls: "vin-terminal-host" });
     this.statusEl = this.containerEl.createDiv({ cls: "vin-terminal-session-status" });
     this.setStatus(`Starting ${this.name}...`);
+    let terminal: Terminal | undefined;
     try {
-      this.term = new Terminal({
+      terminal = new Terminal({
         allowTransparency: false,
         convertEol: true,
         cursorBlink: this.plugin.settings.cursorBlink,
@@ -59,6 +75,7 @@ export class TerminalSession {
         scrollback: 8000,
         theme: getTerminalTheme(this.containerEl),
       });
+      this.term = terminal;
       this.term.loadAddon(this.fitAddon);
       this.term.open(this.hostEl);
 
@@ -180,6 +197,7 @@ export class TerminalSession {
       }, 180);
     } catch (error) {
       this.clearStartupWarningTimer();
+      terminal?.dispose();
       this.containerEl.remove();
       throw error;
     }

@@ -10,6 +10,7 @@ export class FileCitationAutocomplete {
   private lastCharWasBracket = false;
   private dropdownEl: HTMLElement | null = null;
   private renderFrame: number | null = null;
+  private cachedFiles: CitationFile[] | null = null;
 
   constructor(
     private readonly app: App,
@@ -86,6 +87,7 @@ export class FileCitationAutocomplete {
 
   destroy(): void {
     this.active = false;
+    this.cachedFiles = null;
     this.term.attachCustomKeyEventHandler(() => true);
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
     this.removeDropdown();
@@ -95,6 +97,7 @@ export class FileCitationAutocomplete {
     this.active = true;
     this.query = "";
     this.selectedIndex = 0;
+    this.cachedFiles = this.getFiles();
     this.updateResults();
   }
 
@@ -113,22 +116,37 @@ export class FileCitationAutocomplete {
     this.active = false;
     this.query = "";
     this.results = [];
+    this.cachedFiles = null;
     this.selectedIndex = 0;
     this.removeDropdown();
   }
 
   private updateResults(): void {
     const query = this.query.toLowerCase();
-    const files = this.getFiles();
+    const files = this.cachedFiles ?? [];
+    if (!query) {
+      this.results = files
+        .slice()
+        .sort((left, right) => right.mtime - left.mtime)
+        .slice(0, 8)
+        .map((item) => item.file);
+      this.scheduleRender();
+      return;
+    }
+
     const prefix: CitationFile[] = [];
     const contains: CitationFile[] = [];
     for (const file of files) {
       if (file.basenameLower.startsWith(query) || file.pathLower.startsWith(query)) prefix.push(file);
       else if (file.basenameLower.includes(query) || file.pathLower.includes(query)) contains.push(file);
     }
-    const ranked = query ? [...prefix, ...contains] : files.sort((left, right) => right.mtime - left.mtime);
+    const ranked = [...prefix, ...contains];
     this.results = ranked.slice(0, 8).map((item) => item.file);
     this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.results.length - 1));
+    this.scheduleRender();
+  }
+
+  private scheduleRender(): void {
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
     this.renderFrame = requestAnimationFrame(() => {
       this.renderFrame = null;

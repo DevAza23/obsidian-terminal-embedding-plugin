@@ -18,7 +18,6 @@ const ctx = await esbuild.context({
 	logLevel: "info",
 	outfile: "main.js",
 	platform: "node",
-	minify: !watch,
 	sourcemap: watch ? "inline" : false,
 	target: "node18",
 });

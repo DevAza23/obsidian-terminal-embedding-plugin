@@ -87,7 +87,7 @@ The generated `main.js` is intentionally not committed. Build it before copying 
 
 If Obsidian updates Electron, an existing native binary can stop loading with a module-version or ABI-mismatch error. Download the matching platform bundle from the latest release rather than copying only `main.js`.
 
-The release workflow publishes the three standard Obsidian files individually and also publishes the native bundle produced on the workflow runner. Platform-specific release bundles should be built on the corresponding platform.
+The release workflow publishes the three standard Obsidian files once and also publishes native bundles built on Windows, macOS, and Linux runners. The workflow's hosted runners produce x64 bundles; arm64 bundles require a self-hosted or arm runner if GitHub's hosted runners for that architecture are unavailable.
 
 To enable automated releases, copy [`docs/release-workflow.yml`](./docs/release-workflow.yml) to `.github/workflows/release.yml`. You can do this through the GitHub web UI if your token cannot create workflow files.
 

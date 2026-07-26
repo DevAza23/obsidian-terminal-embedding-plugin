@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "types": ["node"],
-    "outDir": "."
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }

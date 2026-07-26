@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- split terminal, session, settings, diagnostics, platform, theme, and citation logic into focused modules
+- fixed POSIX shell defaults, path quoting, vault path handling, citation ranking, and terminal lifecycle cleanup
+- added typecheck tooling and cross-platform release packaging
+
 ## 0.1.1 - Pane Recovery
 
 Patch release focused on startup reliability and debugging.

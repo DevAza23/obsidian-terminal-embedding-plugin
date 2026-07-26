@@ -46,18 +46,18 @@ for (const relativePath of filesToCopy) {
 
 copyRecursive(path.join(root, "node_modules"), path.join(stageDir, "node_modules"));
 
-execFileSync(
-  "powershell.exe",
-  [
-    "-NoLogo",
-    "-NoProfile",
-    "-Command",
-    "Compress-Archive -Path .\\embedded-ai-terminal -DestinationPath .\\embedded-ai-terminal.zip -Force",
-  ],
-  {
-    cwd: releaseDir,
-    stdio: "inherit",
-  },
-);
+try {
+  if (process.platform === "win32") {
+    execFileSync(
+      "powershell.exe",
+      ["-NoLogo", "-NoProfile", "-Command", "Compress-Archive -Path .\\embedded-ai-terminal -DestinationPath .\\embedded-ai-terminal.zip -Force"],
+      { cwd: releaseDir, stdio: "inherit" },
+    );
+  } else {
+    execFileSync("zip", ["-qr", zipPath, "embedded-ai-terminal"], { cwd: releaseDir, stdio: "inherit" });
+  }
+} catch (error) {
+  throw new Error(`Unable to create release archive. Install the ${process.platform === "win32" ? "PowerShell Compress-Archive support" : "zip command"} and try again. ${error instanceof Error ? error.message : String(error)}`);
+}
 
 console.log(`Created ${zipPath}`);

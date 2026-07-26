@@ -6,6 +6,7 @@
   "main": "main.js",
   "scripts": {
     "build": "node esbuild.config.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "dev": "node esbuild.config.mjs --watch",
     "postinstall": "node scripts/patch-node-pty-winpty.js",
     "package:release": "node scripts/package-release.js"

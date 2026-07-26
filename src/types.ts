@@ -1,6 +1,7 @@
 import type { TFile } from "obsidian";
 
 export type ProfileId = "shell" | "codex" | "claude" | "opencode" | "custom";
+export type BackendPreference = "auto" | "node-pty" | "python" | "pipe";
 
 export interface SavedSessionState {
   id: number;
@@ -30,6 +31,7 @@ export interface DiagnosticEntry {
 export interface EmbeddedTerminalSettings {
   shellPath: string;
   shellArgs: string;
+  backend: BackendPreference;
   defaultCwd: string;
   fontSize: number;
   cursorBlink: boolean;

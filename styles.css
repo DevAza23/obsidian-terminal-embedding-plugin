@@ -184,6 +184,7 @@
   font: inherit;
   margin: 0;
   min-width: 5ch;
+  width: var(--vin-terminal-rename-width, 5ch);
   outline: none;
   padding: 0;
 }

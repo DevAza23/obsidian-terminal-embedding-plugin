@@ -28,7 +28,16 @@ export class TerminalView extends ItemView {
   private renamingSession: TerminalSession | null = null;
   private renameInput: HTMLInputElement | null = null;
   private renameValue: string | null = null;
+  private renameWindow: Window | null = null;
   private unsubscribeDiagnostics: (() => void) | null = null;
+  private readonly windowTeardownHandler = (): void => this.disposeSessions();
+  private readonly renameWindowKeydownHandler = (event: KeyboardEvent): void => {
+    if (this.renamingSession && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      this.finishRename(false);
+    }
+  };
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: EmbeddedAiTerminalPlugin) {
     super(leaf);
@@ -67,6 +76,7 @@ export class TerminalView extends ItemView {
     container.empty();
     container.addClass("vin-terminal-container");
     this.rootEl = container;
+    this.bindWindowTeardown();
 
     container.addEventListener("wheel", (event) => {
       event.stopPropagation();
@@ -233,18 +243,45 @@ export class TerminalView extends ItemView {
 
   async onClose(): Promise<void> {
     this.opened = false;
+    this.unbindWindowTeardown();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.clearScheduledFit();
     this.unsubscribeDiagnostics?.();
     this.unsubscribeDiagnostics = null;
+    this.disposeSessions();
+    this.readinessForced = false;
+    this.renderEmptyState();
+  }
+
+  private bindWindowTeardown(): void {
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      return;
+    }
+    ownerWindow.addEventListener("pagehide", this.windowTeardownHandler);
+    ownerWindow.addEventListener("beforeunload", this.windowTeardownHandler);
+    ownerWindow.addEventListener("unload", this.windowTeardownHandler);
+  }
+
+  private unbindWindowTeardown(): void {
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      return;
+    }
+    ownerWindow.removeEventListener("pagehide", this.windowTeardownHandler);
+    ownerWindow.removeEventListener("beforeunload", this.windowTeardownHandler);
+    ownerWindow.removeEventListener("unload", this.windowTeardownHandler);
+    this.removeRenameWindowListener();
+  }
+
+  private disposeSessions(): void {
+    this.finishRename(false);
     for (const session of this.sessions) {
       session.destroy();
     }
     this.sessions = [];
     this.activeSession = null;
-    this.readinessForced = false;
-    this.renderEmptyState();
   }
 
   createSession(profileId: ProfileId, startupOverride?: string): TerminalSession | null {
@@ -335,6 +372,7 @@ export class TerminalView extends ItemView {
       this.renamingSession = null;
       this.renameInput = null;
       this.renameValue = null;
+      this.removeRenameWindowListener();
     }
     if (this.renamingSession && this.renameInput) {
       this.renameValue = this.renameInput.value;
@@ -378,19 +416,8 @@ export class TerminalView extends ItemView {
   private startRename(session: TerminalSession): void {
     this.renamingSession = session;
     this.renameValue = session.name;
+    this.addRenameWindowListener();
     this.renderTabs();
-    const input = this.renameInput;
-    if (!input) {
-      return;
-    }
-    const ownerWindow = this.contentEl.ownerDocument.defaultView;
-    ownerWindow?.setTimeout(() => {
-      if (this.renameInput !== input) {
-        return;
-      }
-      input.focus();
-      input.select();
-    }, 0);
   }
 
   private createRenameInput(tab: HTMLElement, session: TerminalSession): HTMLInputElement {
@@ -420,6 +447,13 @@ export class TerminalView extends ItemView {
       }, 0);
     });
     tab.appendChild(input);
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    ownerWindow?.setTimeout(() => {
+      if (this.renameInput === input && this.renamingSession === session) {
+        input.focus();
+        input.select();
+      }
+    }, 0);
     return input;
   }
 
@@ -433,11 +467,26 @@ export class TerminalView extends ItemView {
     this.renamingSession = null;
     this.renameInput = null;
     this.renameValue = null;
+    this.removeRenameWindowListener();
     if (save) {
       session.rename(value);
     }
     this.renderTabs();
     this.plugin.requestLayoutSave();
+  }
+
+  private addRenameWindowListener(): void {
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (!ownerWindow || this.renameWindow === ownerWindow) {
+      return;
+    }
+    this.renameWindow = ownerWindow;
+    ownerWindow.addEventListener("keydown", this.renameWindowKeydownHandler, true);
+  }
+
+  private removeRenameWindowListener(): void {
+    this.renameWindow?.removeEventListener("keydown", this.renameWindowKeydownHandler, true);
+    this.renameWindow = null;
   }
 
   private restoreState(): void {

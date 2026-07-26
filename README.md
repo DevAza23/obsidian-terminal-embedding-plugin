@@ -130,6 +130,8 @@ Use the command palette:
 
 The session tab bar is visible whenever a terminal session exists. Use the **Toggle terminal session tabs** command if you want to focus it from the command palette.
 
+Obsidian claims `F2` for **Rename file**, so that key may not reach the terminal or citation picker. Rebind or clear Obsidian's `F2` hotkey if you need it in the terminal.
+
 ### Start AI CLI tabs
 
 Use the command palette:

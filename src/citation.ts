@@ -12,6 +12,16 @@ export class FileCitationAutocomplete {
   private dropdownEl: HTMLElement | null = null;
   private renderFrame: number | null = null;
   private cachedFiles: CitationFile[] | null = null;
+  private readonly documentMouseDownHandler = (event: MouseEvent): void => {
+    if (!this.active || !this.dropdownEl) {
+      return;
+    }
+    const target = event.target;
+    if (target && this.dropdownEl.contains(target as Node)) {
+      return;
+    }
+    this.dismiss();
+  };
 
   constructor(
     private readonly app: App,
@@ -19,6 +29,7 @@ export class FileCitationAutocomplete {
     private readonly writeToShell: (data: string) => void,
     private readonly containerEl: HTMLElement,
   ) {
+    this.containerEl.ownerDocument.addEventListener("mousedown", this.documentMouseDownHandler);
     this.term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (!this.active) return true;
       if (event.type !== "keydown") return true;
@@ -112,6 +123,7 @@ export class FileCitationAutocomplete {
   destroy(): void {
     this.active = false;
     this.cachedFiles = null;
+    this.containerEl.ownerDocument.removeEventListener("mousedown", this.documentMouseDownHandler);
     this.term.attachCustomKeyEventHandler(() => true);
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame);
     this.removeDropdown();

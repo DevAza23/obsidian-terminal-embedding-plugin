@@ -208,8 +208,13 @@
   background: var(--background-secondary);
   border-bottom: 1px solid var(--background-modifier-border);
   color: var(--text-normal);
+  display: none;
   flex-shrink: 0;
   padding: 10px 16px;
+}
+
+.vin-terminal-readiness.is-visible {
+  display: block;
 }
 
 .vin-terminal-readiness.is-limited {

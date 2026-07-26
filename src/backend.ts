@@ -367,26 +367,57 @@ function commandName(command: string): string {
   }
 }
 
-function commandAvailable(plugin: EmbeddedAiTerminalPlugin, command: string): boolean {
+function commandAvailableAsync(plugin: EmbeddedAiTerminalPlugin, command: string): Promise<boolean> {
   const name = commandName(command);
   if (!name) {
-    return false;
+    return Promise.resolve(false);
   }
   if (process.platform === "win32") {
-    return spawnSync("where.exe", [name], { stdio: "ignore" }).status === 0;
+    return spawnStatus("where.exe", [name]);
   }
   const shellArgs = parseArgs(plugin.settings.shellArgs);
   const quotedName = `'${name.replace(/'/g, "'\\''")}'`;
-  return spawnSync(plugin.settings.shellPath, [...shellArgs, "-c", `command -v ${quotedName}`], {
+  return spawnStatus(plugin.settings.shellPath, [...shellArgs, "-c", `command -v ${quotedName}`], {
     cwd: plugin.settings.defaultCwd || process.cwd(),
-    stdio: "ignore",
-  }).status === 0;
+  });
 }
 
-export function getBackendReadiness(
+function spawnStatus(
+  command: string,
+  args: string[],
+  options?: { cwd?: string },
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, args, { ...options, stdio: "ignore" });
+    } catch {
+      resolve(false);
+      return;
+    }
+    child.once("error", () => resolve(false));
+    child.once("close", (code) => resolve(code === 0));
+  });
+}
+
+let cachedPythonReadiness: boolean | undefined;
+
+async function probePythonAvailable(): Promise<boolean> {
+  if (cachedPythonReadiness !== undefined) {
+    return cachedPythonReadiness;
+  }
+  const available = (await Promise.all(
+    ["python3", "python"].map((candidate) => spawnStatus(candidate, ["-c", "import pty"])),
+  )).some(Boolean);
+  cachedPythonReadiness = available;
+  return available;
+}
+
+export async function getBackendReadiness(
   plugin: EmbeddedAiTerminalPlugin,
   backend?: Pick<TerminalBackend, "name" | "isPty">,
-): BackendReadiness {
+): Promise<BackendReadiness> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
   let nativeAvailable = false;
   try {
     loadNodePty(plugin);
@@ -397,23 +428,23 @@ export function getBackendReadiness(
 
   let pythonAvailable = false;
   if (process.platform !== "win32") {
-    try {
-      findPythonInterpreter();
-      pythonAvailable = true;
-    } catch {
-      // Python PTY is optional.
-    }
+    pythonAvailable = await probePythonAvailable();
   }
 
+  const [claude, codex, opencode] = await Promise.all([
+    commandAvailableAsync(plugin, plugin.settings.commands.claude),
+    commandAvailableAsync(plugin, plugin.settings.commands.codex),
+    commandAvailableAsync(plugin, plugin.settings.commands.opencode),
+  ]);
   return {
     nativeAvailable,
     pythonAvailable,
     selectedBackend: backend?.name,
     selectedIsPty: backend?.isPty,
     commands: {
-      claude: commandAvailable(plugin, plugin.settings.commands.claude),
-      codex: commandAvailable(plugin, plugin.settings.commands.codex),
-      opencode: commandAvailable(plugin, plugin.settings.commands.opencode),
+      claude,
+      codex,
+      opencode,
     },
   };
 }

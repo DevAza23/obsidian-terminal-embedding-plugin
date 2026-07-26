@@ -157,7 +157,7 @@ The plugin settings include:
 - provider command strings for Codex, Claude, OpenCode, and custom commands
 - PTY backend preference for newly opened tabs
 
-The terminal shows a readiness panel after startup. It reports whether the session has full terminal support, whether the configured Codex, Claude Code, and OpenCode commands are on `PATH`, and the one action to take if the installation is limited. Technical backend, renderer, ABI, and process details remain available under **Technical details**.
+The terminal readiness panel appears automatically only when an active session needs attention, such as limited terminal support or a missing CLI. It is also available on demand through the **Show terminal readiness** command. It reports whether the session has full terminal support, whether the configured Codex, Claude Code, and OpenCode commands are on `PATH`, and the one action to take if the installation is limited. Technical backend, renderer, ABI, and process details remain available under **Technical details**.
 
 On POSIX systems, the default shell arguments are `-il` so login and interactive startup configuration is loaded. Custom shell arguments are preserved exactly when configured.
 

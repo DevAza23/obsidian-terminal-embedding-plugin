@@ -18,6 +18,9 @@ export class TerminalView extends ItemView {
   private fitTimer: number | null = null;
   private readinessEl!: HTMLElement;
   private readiness: BackendReadiness | null = null;
+  private readinessProbe: Promise<void> | null = null;
+  private readinessRefreshRequested = false;
+  private readinessForced = false;
   private diagnosticsEl!: HTMLElement;
   private pendingState: ViewStatePayload | null = null;
   private opened = false;
@@ -95,7 +98,7 @@ export class TerminalView extends ItemView {
     this.sessionsEl = container.createDiv({ cls: "vin-terminal-sessions" });
     this.unsubscribeDiagnostics = this.plugin.subscribeDiagnostics(() => this.renderDiagnostics());
     this.renderDiagnostics();
-    this.renderReadiness(true);
+    this.renderReadiness();
     this.renderEmptyState();
 
     this.resizeObserver = new ResizeObserver(() => {
@@ -108,8 +111,10 @@ export class TerminalView extends ItemView {
         for (const session of this.sessions) {
           session.updateTheme();
         }
+        this.scheduleFit(50);
       }),
     );
+    void this.refreshReadiness();
 
     if (this.pendingState?.sessions?.length) {
       this.restoreState();
@@ -144,36 +149,72 @@ export class TerminalView extends ItemView {
     }
   }
 
-  private renderReadiness(refresh = false): void {
+  async refreshReadiness(force = false): Promise<void> {
+    if (this.readinessProbe) {
+      if (force) {
+        this.readinessRefreshRequested = true;
+      }
+      return this.readinessProbe;
+    }
+    this.readinessProbe = getBackendReadiness(this.plugin)
+      .then((readiness) => {
+        this.readiness = readiness;
+        this.renderReadiness();
+      })
+      .catch(() => {
+        this.renderReadiness();
+      })
+      .finally(() => {
+        this.readinessProbe = null;
+        if (this.readinessRefreshRequested) {
+          this.readinessRefreshRequested = false;
+          void this.refreshReadiness();
+        }
+      });
+    return this.readinessProbe;
+  }
+
+  showReadiness(): void {
+    this.readinessForced = true;
+    this.renderReadiness();
+    void this.refreshReadiness(true);
+  }
+
+  private renderReadiness(): void {
     if (!this.readinessEl) {
       return;
     }
-    if (refresh || !this.readiness) {
-      this.readiness = getBackendReadiness(this.plugin, this.activeSession?.backend);
-    } else {
-      this.readiness = {
-        ...this.readiness,
-        selectedBackend: this.activeSession?.backend.name,
-        selectedIsPty: this.activeSession?.backend.isPty,
-      };
-    }
     const readiness = this.readiness;
-    const limited = readiness.selectedIsPty === false;
+    const selectedIsPty = this.activeSession?.backend.isPty;
+    const profileId = this.activeSession?.profileId;
+    const commandAvailable = profileId === "codex" || profileId === "claude" || profileId === "opencode"
+      ? readiness?.commands[profileId]
+      : true;
+    const actionable = selectedIsPty === false || commandAvailable === false;
+    const visible = this.readinessForced || actionable;
+    this.readinessEl.toggleClass("is-visible", visible);
+    if (!visible) {
+      this.readinessEl.empty();
+      return;
+    }
     this.readinessEl.empty();
+    if (!readiness) {
+      this.readinessEl.createDiv({ cls: "vin-terminal-readiness-title", text: "Checking terminal readiness…" });
+      return;
+    }
+    const limited = selectedIsPty === false;
     this.readinessEl.toggleClass("is-limited", limited);
     this.readinessEl.createDiv({
       cls: "vin-terminal-readiness-title",
-      text: readiness.selectedBackend ? (limited ? "Limited terminal mode" : "Terminal ready") : "Terminal readiness",
+      text: limited ? "Limited terminal mode" : "Terminal readiness",
     });
     this.readinessEl.createDiv({
       cls: "vin-terminal-readiness-description",
-      text: readiness.selectedBackend
-        ? (limited
-          ? "Regular commands can run, but full-screen apps such as Codex, Claude Code, and OpenCode may not work here. Install the matching native bundle from the release page for full terminal support."
-          : `Full terminal support is active (${readiness.selectedBackend}).`)
-        : (readiness.nativeAvailable || readiness.pythonAvailable
-          ? "The terminal can start with full terminal support."
-          : "The terminal will use basic command mode. Install the matching native bundle from the release page for full-screen app support."),
+      text: limited
+        ? "Regular commands can run, but full-screen apps such as Codex, Claude Code, and OpenCode may not work here. Install the matching native bundle from the release page for full terminal support."
+        : commandAvailable === false
+          ? `The ${profileId} command was not found on PATH. Install it or update its command in settings.`
+          : "Full terminal support is active.",
     });
     const missing = (Object.entries(readiness.commands) as Array<[keyof typeof readiness.commands, boolean]>)
       .filter(([, available]) => !available)
@@ -190,7 +231,7 @@ export class TerminalView extends ItemView {
       text: [
         `Native backend available: ${readiness.nativeAvailable}`,
         `Python backend available: ${readiness.pythonAvailable}`,
-        `Selected backend: ${readiness.selectedBackend ?? "not started"}`,
+        `Selected backend: ${this.activeSession?.backend.name ?? "not started"}`,
         `Commands: ${Object.entries(readiness.commands).map(([name, available]) => `${name}=${available}`).join(", ")}`,
       ].join("\n"),
     });
@@ -208,6 +249,7 @@ export class TerminalView extends ItemView {
     }
     this.sessions = [];
     this.activeSession = null;
+    this.readinessForced = false;
     this.renderEmptyState();
   }
 
@@ -239,7 +281,7 @@ export class TerminalView extends ItemView {
     session.name = makeSessionLabel(profileId, id);
     this.sessions.push(session);
     this.switchTo(session);
-    this.renderReadiness(true);
+    this.renderReadiness();
     this.renderTabs();
     this.renderEmptyState();
     this.plugin.requestLayoutSave();
@@ -256,7 +298,7 @@ export class TerminalView extends ItemView {
     this.activeSession?.hide();
     this.activeSession = session;
     session.show();
-    this.renderReadiness(false);
+    this.renderReadiness();
     this.renderTabs();
     this.renderEmptyState();
     this.plugin.requestLayoutSave();

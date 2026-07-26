@@ -53,6 +53,11 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
       callback: () => void this.withEnsuredView((view) => view.createSession("opencode")),
     });
     this.addCommand({
+      id: "show-terminal-readiness",
+      name: "Show terminal readiness",
+      callback: () => this.withActiveView((view) => view.showReadiness()),
+    });
+    this.addCommand({
       id: "send-current-file-path",
       name: "Send current file path to terminal",
       callback: () => {
@@ -80,6 +85,7 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    void this.getActiveTerminalView()?.refreshReadiness(true);
   }
 
   getDefaultCwd(): string {

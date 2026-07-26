@@ -273,6 +273,7 @@ export class TerminalSession {
     this.term.options.fontSize = this.plugin.settings.fontSize;
     this.term.options.cursorBlink = this.plugin.settings.cursorBlink;
     this.term.clearTextureAtlas();
+    this.term.refresh(0, this.term.rows - 1);
   }
 
   sendText(text: string, appendEnter = true): void {

@@ -1,13 +1,14 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import { getShellDefaults, getVaultBase } from "./platform";
 import type EmbeddedAiTerminalPlugin from "./main";
-import type { EmbeddedTerminalSettings, ProfileId } from "./types";
+import type { BackendPreference, EmbeddedTerminalSettings, ProfileId } from "./types";
 
 export function createDefaultSettings(): EmbeddedTerminalSettings {
   const shell = getShellDefaults();
   return {
     shellPath: shell.shellPath,
     shellArgs: shell.shellArgs,
+    backend: "auto",
     defaultCwd: "",
     fontSize: 14,
     cursorBlink: true,
@@ -25,6 +26,10 @@ function stringSetting(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function backendSetting(value: unknown): BackendPreference {
+  return value === "node-pty" || value === "python" || value === "pipe" ? value : "auto";
+}
+
 export function normalizeSettings(loaded: unknown): EmbeddedTerminalSettings {
   const defaults = createDefaultSettings();
   const data = loaded && typeof loaded === "object" ? loaded as Record<string, unknown> : {};
@@ -34,6 +39,7 @@ export function normalizeSettings(loaded: unknown): EmbeddedTerminalSettings {
   return {
     shellPath: stringSetting(data.shellPath, defaults.shellPath),
     shellArgs: stringSetting(data.shellArgs, defaults.shellArgs),
+    backend: backendSetting(data.backend),
     defaultCwd: stringSetting(data.defaultCwd, defaults.defaultCwd),
     fontSize: Math.min(22, Math.max(11, fontSize)),
     cursorBlink: typeof data.cursorBlink === "boolean" ? data.cursorBlink : defaults.cursorBlink,
@@ -76,6 +82,23 @@ export class EmbeddedTerminalSettingsTab extends PluginSettingTab {
         text.setValue(this.plugin.settings.shellArgs);
         text.onChange(async (value) => {
           this.plugin.settings.shellArgs = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("PTY backend")
+      .setDesc("Choose how terminal processes are connected for newly opened tabs. Auto uses the best available backend.")
+      .addDropdown((dropdown) => {
+        dropdown.addOptions({
+          auto: "Auto",
+          "node-pty": "Native node-pty",
+          python: "Python PTY",
+          pipe: "Pipe (no PTY)",
+        });
+        dropdown.setValue(this.plugin.settings.backend);
+        dropdown.onChange(async (value) => {
+          this.plugin.settings.backend = backendSetting(value);
           await this.plugin.saveSettings();
         });
       });

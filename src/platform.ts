@@ -82,7 +82,7 @@ export function getVaultBase(app: App): string {
   return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : "";
 }
 
-function getPluginInstallDir(plugin: EmbeddedAiTerminalPlugin): string {
+export function getPluginInstallDir(plugin: EmbeddedAiTerminalPlugin): string {
   const manifestDir = (plugin.manifest as { dir?: string }).dir ?? "";
   if (!manifestDir) {
     return "";

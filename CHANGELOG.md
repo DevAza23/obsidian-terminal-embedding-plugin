@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- added pluggable node-pty, Python PTY, and pipe terminal backends for store-compatible installation
+- added backend selection settings and diagnostics for degraded no-PTY sessions
 - added tagged GitHub release automation with store assets and platform-specific native bundles
 - improved POSIX shell argument parsing and default login-shell startup
 - removed committed build output and clarified store versus native installation paths

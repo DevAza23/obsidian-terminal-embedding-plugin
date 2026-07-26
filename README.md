@@ -14,6 +14,16 @@ The plugin uses a PTY-backed terminal and supports Windows, macOS, and Linux. Th
 - Obsidian theme integration
 - POSIX shell defaults with login and interactive startup
 
+## Terminal backends
+
+The **PTY backend** setting defaults to **Auto** and tries these backends in order:
+
+1. **Native node-pty** — the highest-fidelity path, including real ConPTY/winpty support on Windows and native PTYs on macOS and Linux. Use the matching platform bundle from a release.
+2. **Python PTY** — the store-compatible POSIX fallback. The plugin probes for `python3` or `python`, writes its embedded helper into the plugin directory, and uses Python's `pty` module with resize support. Windows does not provide this backend.
+3. **Pipe mode** — the last-resort fallback, available wherever the shell can start. It has no terminal device, so full-screen TUIs and applications that require a PTY may render incorrectly. The session status and diagnostics identify this degradation and recommend installing the native bundle.
+
+Store installation on Linux and macOS can therefore use the Python PTY when a usable Python interpreter is available. Store installation on Windows falls back to pipe mode; install the Windows native bundle for proper terminal behavior.
+
 ## Installation
 
 ### Community Plugins
@@ -24,7 +34,7 @@ After the plugin is accepted into the Obsidian Community Plugin directory, insta
 - `manifest.json`
 - `styles.css`
 
-This store installation is the JavaScript/plugin layer. The current terminal backend still requires a native `node-pty` runtime, so a store installation may report that the native runtime is unavailable until the native backend work is completed.
+This store installation includes the JavaScript/plugin layer. On Linux and macOS, Auto can use the embedded Python PTY helper when a usable Python interpreter is installed; on Windows, Auto uses pipe mode unless the native bundle is installed.
 
 ### Manual native installation
 

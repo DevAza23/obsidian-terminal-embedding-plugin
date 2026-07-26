@@ -95,6 +95,42 @@
   opacity: 0;
 }
 
+.vin-terminal-session-actions {
+  align-items: center;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  min-height: 48px;
+  padding: 7px 12px;
+}
+
+.vin-terminal-new-session-button {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  color: var(--text-normal);
+  cursor: pointer;
+  font-family: var(--font-interface);
+  font-size: 12px;
+  padding: 7px 12px;
+}
+
+.vin-terminal-new-session-button:hover {
+  background: var(--background-modifier-hover);
+}
+
+.vin-terminal-container.has-multiple-sessions .vin-terminal-session-actions {
+  display: none;
+}
+
+.vin-terminal-container.has-multiple-sessions .vin-terminal-tab-bar {
+  opacity: 1;
+  position: relative;
+  transform: none;
+}
+
 .vin-terminal-container.is-toolbar-visible .vin-terminal-tab-bar,
 .vin-terminal-tab-bar:focus-within {
   opacity: 1;
@@ -372,6 +408,10 @@
 
 .vin-terminal-container.is-toolbar-visible .vin-terminal-sessions {
   padding-top: 62px;
+}
+
+.vin-terminal-container.has-multiple-sessions .vin-terminal-sessions {
+  padding-top: 0;
 }
 
 .vin-terminal-session {

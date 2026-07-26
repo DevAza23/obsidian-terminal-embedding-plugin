@@ -16,6 +16,7 @@ export interface TerminalBackend {
   resize(cols: number, rows: number): void;
   kill(): void;
   dispose(): void;
+  getErrorDetail?(): string;
 }
 
 export interface BackendExitEvent {
@@ -50,6 +51,7 @@ import json
 import os
 import pty
 import select
+import shutil
 import signal
 import struct
 import sys
@@ -75,6 +77,9 @@ def main():
     cwd = sys.argv[3]
     cols = int(sys.argv[4])
     rows = int(sys.argv[5])
+    if (os.path.isabs(shell) and not os.access(shell, os.X_OK)) or (not os.path.isabs(shell) and shutil.which(shell) is None):
+        print(f"Shell executable '{shell}' could not be found or is not executable.", file=sys.stderr, flush=True)
+        return 1
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(cwd)
@@ -163,11 +168,11 @@ def main():
                 break
             raise
     os.close(fd)
-    sys.exit(exit_code(status))
+    return exit_code(status)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 `;
 
 class NodePtyBackend implements TerminalBackend {
@@ -215,28 +220,53 @@ class ChildProcessBackend implements TerminalBackend {
   private readonly exitListeners = new Set<(event: BackendExitEvent) => void>();
   private readonly stdoutDecoder = new TextDecoder("utf-8");
   private readonly stderrDecoder = new TextDecoder("utf-8");
+  private readonly forwardStderr: boolean;
+  private stderrDetail = "";
   private exited = false;
 
   constructor(
     protected readonly process: ChildProcessWithoutNullStreams,
     readonly name: string,
     isPty: boolean,
+    forwardStderr = true,
   ) {
     this.isPty = isPty;
+    this.forwardStderr = forwardStderr;
     this.process.stdout.on("data", (data: Buffer) => this.emitData(this.stdoutDecoder.decode(data, { stream: true })));
-    this.process.stderr.on("data", (data: Buffer) => this.emitData(this.stderrDecoder.decode(data, { stream: true })));
+    this.process.stderr.on("data", (data: Buffer) => {
+      const text = this.stderrDecoder.decode(data, { stream: true });
+      if (this.forwardStderr) {
+        this.emitData(text);
+      } else {
+        this.stderrDetail += text;
+      }
+    });
     this.process.on("error", (error) => {
-      this.emitData(`\r\n[${this.name} error: ${error.message}]\r\n`);
+      const detail = `${this.name} error: ${error.message}`;
+      if (this.forwardStderr) {
+        this.emitData(`\r\n[${detail}]\r\n`);
+      } else {
+        this.stderrDetail += `${detail}\n`;
+      }
     });
     this.process.on("exit", (code, signal) => {
       this.emitData(this.stdoutDecoder.decode());
-      this.emitData(this.stderrDecoder.decode());
+      const trailingStderr = this.stderrDecoder.decode();
+      if (this.forwardStderr) {
+        this.emitData(trailingStderr);
+      } else {
+        this.stderrDetail += trailingStderr;
+      }
       this.exited = true;
       const event = { exitCode: code ?? 1, signal: signal ?? undefined };
       for (const listener of this.exitListeners) {
         listener(event);
       }
     });
+  }
+
+  getErrorDetail(): string {
+    return this.stderrDetail.trim();
   }
 
   get pid(): number {
@@ -300,7 +330,7 @@ class ChildProcessBackend implements TerminalBackend {
 
 class PythonPtyBackend extends ChildProcessBackend {
   constructor(process: ChildProcessWithoutNullStreams) {
-    super(process, "Python PTY", true);
+    super(process, "Python PTY", true, false);
   }
 
   override write(data: string): void {

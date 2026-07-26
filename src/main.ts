@@ -6,12 +6,14 @@ import { getVaultBase } from "./platform";
 import { TerminalView } from "./view";
 import { VIEW_TYPE_EMBEDDED_AI_TERMINAL } from "./constants";
 import type { DiagnosticEntry, DiagnosticLevel, EmbeddedTerminalSettings, ProfileId } from "./types";
+import type { TerminalSession } from "./session";
 
 export { VIEW_TYPE_EMBEDDED_AI_TERMINAL } from "./constants";
 
 export default class EmbeddedAiTerminalPlugin extends Plugin {
   settings: EmbeddedTerminalSettings = createDefaultSettings();
   private readonly diagnostics = new DiagnosticsStore();
+  private readonly liveSessions = new Set<TerminalSession>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -58,6 +60,11 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
       callback: () => this.withActiveView((view) => view.showReadiness()),
     });
     this.addCommand({
+      id: "toggle-terminal-tabs",
+      name: "Toggle terminal session tabs",
+      callback: () => this.withActiveView((view) => view.toggleTabs()),
+    });
+    this.addCommand({
       id: "send-current-file-path",
       name: "Send current file path to terminal",
       callback: () => {
@@ -73,6 +80,21 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       void this.ensureLeaf();
     });
+  }
+
+  onunload(): void {
+    for (const session of [...this.liveSessions]) {
+      session.destroy();
+    }
+    this.liveSessions.clear();
+  }
+
+  trackSession(session: TerminalSession): void {
+    this.liveSessions.add(session);
+  }
+
+  untrackSession(session: TerminalSession): void {
+    this.liveSessions.delete(session);
   }
 
   async loadSettings(): Promise<void> {
@@ -127,12 +149,16 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
   }
 
   refreshSessions(): void {
-    this.withActiveView((view) => {
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_EMBEDDED_AI_TERMINAL)) {
+      const view = leaf.view as TerminalView | undefined;
+      if (!view) {
+        continue;
+      }
       for (const session of view.sessions) {
         session.updateTheme();
         session.fit();
       }
-    });
+    }
   }
 
   async openSideTerminal(): Promise<void> {

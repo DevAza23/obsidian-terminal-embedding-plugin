@@ -8,8 +8,19 @@ interface Rgb {
 
 const ANSI_HUES = [0, 0, 120, 48, 220, 300, 185, 0];
 
-export function getTerminalFontFamily(): string {
-  return "var(--font-monospace), monospace";
+export function getTerminalFontFamily(element: HTMLElement): string {
+  const styles = element.ownerDocument.defaultView?.getComputedStyle(element.ownerDocument.body);
+  const configured = styles?.getPropertyValue("--font-monospace").trim() ?? "";
+  const concrete = configured && !configured.includes("var(") ? configured : "";
+  return [
+    concrete,
+    '"DejaVu Sans Mono"',
+    '"Noto Sans Mono"',
+    '"Liberation Mono"',
+    "Menlo",
+    "Consolas",
+    "monospace",
+  ].filter(Boolean).join(", ");
 }
 
 export function contrastRatio(first: string, second: string): number {
@@ -41,9 +52,14 @@ export function getTerminalTheme(element: HTMLElement): NonNullable<Terminal["op
   const black = themedTone(foregroundHsl.h, Math.min(0.16, foregroundHsl.s), isDark
     ? Math.max(0.01, backgroundHsl.l - 0.06)
     : 0.1);
-  const white = themedTone(foregroundHsl.h, Math.min(0.12, foregroundHsl.s), isDark
-    ? Math.min(0.96, backgroundHsl.l + 0.88)
-    : 0.94);
+  const white = colorWithContrast(
+    Math.min(0.12, foregroundHsl.s),
+    foregroundHsl.h,
+    isDark ? Math.min(0.96, backgroundHsl.l + 0.88) : 0.94,
+    [backgroundRgb],
+    2.2,
+    isDark,
+  );
   const ansi = ANSI_HUES.map((hue, index) => {
     if (index === 0) {
       return black;
@@ -56,7 +72,14 @@ export function getTerminalTheme(element: HTMLElement): NonNullable<Terminal["op
   });
   const bright = ANSI_HUES.map((hue, index) => {
     if (index === 7) {
-      return themedTone(foregroundHsl.h, Math.min(0.08, foregroundHsl.s), isDark ? 0.98 : 0.98);
+      return colorWithContrast(
+        Math.min(0.08, foregroundHsl.s),
+        foregroundHsl.h,
+        0.98,
+        [backgroundRgb],
+        2.2,
+        isDark,
+      );
     }
     const baseLightness = index === 0 ? (isDark ? 0.46 : 0.42) : (isDark ? 0.76 : 0.36);
     return colorWithContrast(index === 0 ? 0 : saturation, hue, baseLightness, [backgroundRgb, selectionRgb], 4.5, isDark);

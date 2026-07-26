@@ -73,7 +73,7 @@ export class TerminalSession {
         convertEol: true,
         cursorBlink: this.plugin.settings.cursorBlink,
         customGlyphs: true,
-        fontFamily: getTerminalFontFamily(),
+        fontFamily: getTerminalFontFamily(this.containerEl),
         fontSize: this.plugin.settings.fontSize,
         fontWeight: "400",
         fontWeightBold: "700",
@@ -134,20 +134,27 @@ export class TerminalSession {
           return;
         }
 
+        const backendError = this.backend.getErrorDetail?.();
+        if (backendError && /FileNotFoundError|ENOENT|No such file/i.test(backendError)) {
+          this.term.write(`\r\n[Shell "${this.plugin.settings.shellPath}" could not be started. Check Shell executable in settings.]\r\n`);
+        }
         this.term.write(`\r\n[process exited with code ${exitCode}]\r\n`);
         if (exitCode !== 0) {
           this.plugin.recordDiagnostic({
             level: "warning",
             scope: "process-exit",
             summary: `${this.name} exited with code ${exitCode}.`,
-            detail: formatDiagnosticContext({
-              profile: this.profileId,
-              backend: this.backend.name,
-              shellPath: this.plugin.settings.shellPath,
-              shellArgs: this.plugin.settings.shellArgs,
-              cwd: this.cwd,
-              startupCommand: this.startupCommand,
-            }),
+            detail: [
+              formatDiagnosticContext({
+                profile: this.profileId,
+                backend: this.backend.name,
+                shellPath: this.plugin.settings.shellPath,
+                shellArgs: this.plugin.settings.shellArgs,
+                cwd: this.cwd,
+                startupCommand: this.startupCommand,
+              }),
+              backendError,
+            ].filter(Boolean).join("\n\n"),
           });
         }
       });
@@ -262,6 +269,7 @@ export class TerminalSession {
 
   updateTheme(): void {
     this.term.options.theme = getTerminalTheme(this.containerEl);
+    this.term.options.fontFamily = getTerminalFontFamily(this.containerEl);
     this.term.options.fontSize = this.plugin.settings.fontSize;
     this.term.options.cursorBlink = this.plugin.settings.cursorBlink;
     this.term.clearTextureAtlas();
@@ -361,6 +369,7 @@ export class TerminalSession {
     }
     this.term.dispose();
     this.containerEl.remove();
+    this.plugin.untrackSession(this);
   }
 
   private setStatus(text: string): void {

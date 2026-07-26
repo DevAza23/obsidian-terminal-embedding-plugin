@@ -13,6 +13,7 @@ export class TerminalView extends ItemView {
   tabBarEl!: HTMLElement;
   sessionsEl!: HTMLElement;
   private emptyStateEl!: HTMLElement;
+  private sessionActionsEl!: HTMLElement;
   private rootEl!: HTMLElement;
   private resizeObserver: ResizeObserver | null = null;
   private fitTimer: number | null = null;
@@ -92,6 +93,12 @@ export class TerminalView extends ItemView {
     });
 
     this.tabBarEl = container.createDiv({ cls: "vin-terminal-tab-bar" });
+    this.sessionActionsEl = container.createDiv({ cls: "vin-terminal-session-actions" });
+    const newSessionButton = this.sessionActionsEl.createEl("button", {
+      cls: "vin-terminal-new-session-button",
+      text: "＋ New session",
+    });
+    newSessionButton.addEventListener("click", () => this.createSession("shell"));
     this.readinessEl = container.createDiv({ cls: "vin-terminal-readiness" });
     this.diagnosticsEl = container.createDiv({ cls: "vin-terminal-diagnostics" });
     this.emptyStateEl = container.createDiv({ cls: "vin-terminal-empty-state" });
@@ -128,6 +135,10 @@ export class TerminalView extends ItemView {
     this.toolbarVisible = !this.toolbarVisible;
     this.rootEl.toggleClass("is-toolbar-visible", this.toolbarVisible);
     this.scheduleFit(40);
+  }
+
+  toggleTabs(): void {
+    this.toggleToolbar();
   }
 
   private scheduleFit(delay: number): void {
@@ -279,6 +290,7 @@ export class TerminalView extends ItemView {
       return null;
     }
     session.name = makeSessionLabel(profileId, id);
+    this.plugin.trackSession(session);
     this.sessions.push(session);
     this.switchTo(session);
     this.renderReadiness();
@@ -337,6 +349,7 @@ export class TerminalView extends ItemView {
     }
 
     this.tabBarEl.empty();
+    this.rootEl.toggleClass("has-multiple-sessions", this.sessions.length > 1);
     const tabsScroll = this.tabBarEl.createDiv({ cls: "vin-terminal-tabs-scroll" });
 
     for (const session of this.sessions) {
@@ -436,6 +449,7 @@ export class TerminalView extends ItemView {
           saved.cwd || this.plugin.getDefaultCwd(),
           saved.startupCommand,
         );
+        this.plugin.trackSession(session);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.plugin.recordDiagnostic({

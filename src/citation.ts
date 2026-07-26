@@ -21,6 +21,7 @@ export class FileCitationAutocomplete {
     this.term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
       if (!this.active) return true;
       if (event.type !== "keydown") return true;
+      event.stopPropagation();
 
       if (event.key === "ArrowUp") {
         event.preventDefault();
@@ -62,6 +63,7 @@ export class FileCitationAutocomplete {
       }
 
       this.dismiss();
+      event.stopPropagation();
       return true;
     });
   }

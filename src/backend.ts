@@ -110,15 +110,20 @@ def main():
         if sys.stdin in ready:
             try:
                 data = os.read(sys.stdin.fileno(), 65536)
-            except OSError:
-                data = b""
-            if not data:
+            except OSError as error:
+                if error.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    data = None
+                else:
+                    stdin_open = False
+                    data = None
+            if data == b"":
                 stdin_open = False
                 try:
                     os.killpg(pid, 15)
                 except ProcessLookupError:
                     pass
-            input_buffer += data
+            elif data is not None:
+                input_buffer += data
             while input_buffer:
                 frame_type = input_buffer[:1]
                 if frame_type == b"I":
@@ -200,6 +205,8 @@ class ChildProcessBackend implements TerminalBackend {
   readonly isPty: boolean;
   private readonly dataListeners = new Set<(data: string) => void>();
   private readonly exitListeners = new Set<(event: BackendExitEvent) => void>();
+  private readonly stdoutDecoder = new TextDecoder("utf-8");
+  private readonly stderrDecoder = new TextDecoder("utf-8");
   private exited = false;
 
   constructor(
@@ -208,12 +215,14 @@ class ChildProcessBackend implements TerminalBackend {
     isPty: boolean,
   ) {
     this.isPty = isPty;
-    this.process.stdout.on("data", (data: Buffer) => this.emitData(data));
-    this.process.stderr.on("data", (data: Buffer) => this.emitData(data));
+    this.process.stdout.on("data", (data: Buffer) => this.emitData(this.stdoutDecoder.decode(data, { stream: true })));
+    this.process.stderr.on("data", (data: Buffer) => this.emitData(this.stderrDecoder.decode(data, { stream: true })));
     this.process.on("error", (error) => {
       this.emitData(`\r\n[${this.name} error: ${error.message}]\r\n`);
     });
     this.process.on("exit", (code, signal) => {
+      this.emitData(this.stdoutDecoder.decode());
+      this.emitData(this.stderrDecoder.decode());
       this.exited = true;
       const event = { exitCode: code ?? 1, signal: signal ?? undefined };
       for (const listener of this.exitListeners) {
@@ -271,10 +280,39 @@ class ChildProcessBackend implements TerminalBackend {
     this.kill();
   }
 
-  private emitData(data: Buffer | string): void {
-    const text = typeof data === "string" ? data : data.toString("utf8");
+  protected emitData(data: string): void {
+    if (!data) {
+      return;
+    }
     for (const listener of this.dataListeners) {
-      listener(text);
+      listener(data);
+    }
+  }
+}
+
+class PythonPtyBackend extends ChildProcessBackend {
+  constructor(process: ChildProcessWithoutNullStreams) {
+    super(process, "Python PTY", true);
+  }
+
+  override write(data: string): void {
+    const payload = Buffer.from(data, "utf8");
+    const frame = Buffer.allocUnsafe(5 + payload.length);
+    frame.write("I", 0, "ascii");
+    frame.writeUInt32BE(payload.length, 1);
+    payload.copy(frame, 5);
+    if (!this.process.stdin.destroyed) {
+      this.process.stdin.write(frame);
+    }
+  }
+
+  override resize(cols: number, rows: number): void {
+    const frame = Buffer.allocUnsafe(9);
+    frame.write("R", 0, "ascii");
+    frame.writeUInt32BE(cols, 1);
+    frame.writeUInt32BE(rows, 5);
+    if (!this.process.stdin.destroyed) {
+      this.process.stdin.write(frame);
     }
   }
 }
@@ -292,13 +330,24 @@ function writePythonHelper(plugin: EmbeddedAiTerminalPlugin): string {
   return helperPath;
 }
 
+let cachedPythonInterpreter: string | null | undefined;
+
 function findPythonInterpreter(): string {
-  for (const candidate of process.platform === "win32" ? ["python", "py"] : ["python3", "python"]) {
+  if (cachedPythonInterpreter === null) {
+    throw new Error("No Python interpreter with the pty module was found.");
+  }
+  if (cachedPythonInterpreter) {
+    return cachedPythonInterpreter;
+  }
+
+  for (const candidate of ["python3", "python"]) {
     const result = spawnSync(candidate, ["-c", "import pty"], { stdio: "ignore" });
     if (result.status === 0) {
-      return candidate;
+      cachedPythonInterpreter = candidate;
+      return cachedPythonInterpreter;
     }
   }
+  cachedPythonInterpreter = null;
   throw new Error("No Python interpreter with the pty module was found.");
 }
 
@@ -317,27 +366,7 @@ function spawnPythonBackend(plugin: EmbeddedAiTerminalPlugin, cwd: string): Term
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
-  const backend = new ChildProcessBackend(child, "Python PTY", true);
-  backend.write = (data: string): void => {
-    const payload = Buffer.from(data, "utf8");
-    const frame = Buffer.allocUnsafe(5 + payload.length);
-    frame.write("I", 0, "ascii");
-    frame.writeUInt32BE(payload.length, 1);
-    payload.copy(frame, 5);
-    if (!child.stdin.destroyed) {
-      child.stdin.write(frame);
-    }
-  };
-  backend.resize = (cols: number, rows: number): void => {
-    const frame = Buffer.allocUnsafe(9);
-    frame.write("R", 0, "ascii");
-    frame.writeUInt32BE(cols, 1);
-    frame.writeUInt32BE(rows, 5);
-    if (!child.stdin.destroyed) {
-      child.stdin.write(frame);
-    }
-  };
-  return backend;
+  return new PythonPtyBackend(child);
 }
 
 function spawnPipeBackend(plugin: EmbeddedAiTerminalPlugin, cwd: string): TerminalBackend {

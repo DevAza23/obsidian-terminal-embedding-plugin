@@ -88,7 +88,7 @@ export class EmbeddedTerminalSettingsTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("PTY backend")
-      .setDesc("Choose how terminal processes are connected. Auto uses the best available backend.")
+      .setDesc("Choose how terminal processes are connected for newly opened tabs. Auto uses the best available backend.")
       .addDropdown((dropdown) => {
         dropdown.addOptions({
           auto: "Auto",

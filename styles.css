@@ -204,6 +204,48 @@
   padding: 12px 16px;
 }
 
+.vin-terminal-readiness {
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  display: none;
+  flex-shrink: 0;
+  padding: 10px 16px;
+}
+
+.vin-terminal-readiness.is-visible {
+  display: block;
+}
+
+.vin-terminal-readiness.is-limited {
+  border-left: 3px solid var(--text-warning, var(--interactive-accent));
+}
+
+.vin-terminal-readiness-title {
+  font-weight: 600;
+}
+
+.vin-terminal-readiness-description,
+.vin-terminal-readiness-missing {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  margin-top: 4px;
+}
+
+.vin-terminal-readiness-missing {
+  color: var(--text-warning, var(--text-muted));
+}
+
+.vin-terminal-readiness-details {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  margin-top: 6px;
+}
+
+.vin-terminal-readiness-details pre {
+  white-space: pre-wrap;
+}
+
 .vin-terminal-diagnostics-header {
   align-items: flex-start;
   display: flex;

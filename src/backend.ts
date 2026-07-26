@@ -27,6 +27,14 @@ export interface BackendDisposable {
   dispose(): void;
 }
 
+export interface BackendReadiness {
+  readonly nativeAvailable: boolean;
+  readonly pythonAvailable: boolean;
+  readonly selectedBackend?: string;
+  readonly selectedIsPty?: boolean;
+  readonly commands: Record<"claude" | "codex" | "opencode", boolean>;
+}
+
 interface NodePtyProcess {
   readonly pid: number;
   onData(listener: (data: string) => void): IDisposable;
@@ -351,6 +359,96 @@ function findPythonInterpreter(): string {
   throw new Error("No Python interpreter with the pty module was found.");
 }
 
+function commandName(command: string): string {
+  try {
+    return parseArgs(command)[0] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function commandAvailableAsync(plugin: EmbeddedAiTerminalPlugin, command: string): Promise<boolean> {
+  const name = commandName(command);
+  if (!name) {
+    return Promise.resolve(false);
+  }
+  if (process.platform === "win32") {
+    return spawnStatus("where.exe", [name]);
+  }
+  const shellArgs = parseArgs(plugin.settings.shellArgs);
+  const quotedName = `'${name.replace(/'/g, "'\\''")}'`;
+  return spawnStatus(plugin.settings.shellPath, [...shellArgs, "-c", `command -v ${quotedName}`], {
+    cwd: plugin.settings.defaultCwd || process.cwd(),
+  });
+}
+
+function spawnStatus(
+  command: string,
+  args: string[],
+  options?: { cwd?: string },
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(command, args, { ...options, stdio: "ignore" });
+    } catch {
+      resolve(false);
+      return;
+    }
+    child.once("error", () => resolve(false));
+    child.once("close", (code) => resolve(code === 0));
+  });
+}
+
+let cachedPythonReadiness: boolean | undefined;
+
+async function probePythonAvailable(): Promise<boolean> {
+  if (cachedPythonReadiness !== undefined) {
+    return cachedPythonReadiness;
+  }
+  const available = (await Promise.all(
+    ["python3", "python"].map((candidate) => spawnStatus(candidate, ["-c", "import pty"])),
+  )).some(Boolean);
+  cachedPythonReadiness = available;
+  return available;
+}
+
+export async function getBackendReadiness(
+  plugin: EmbeddedAiTerminalPlugin,
+  backend?: Pick<TerminalBackend, "name" | "isPty">,
+): Promise<BackendReadiness> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  let nativeAvailable = false;
+  try {
+    loadNodePty(plugin);
+    nativeAvailable = true;
+  } catch {
+    // Runtime probing is intentionally best effort.
+  }
+
+  let pythonAvailable = false;
+  if (process.platform !== "win32") {
+    pythonAvailable = await probePythonAvailable();
+  }
+
+  const [claude, codex, opencode] = await Promise.all([
+    commandAvailableAsync(plugin, plugin.settings.commands.claude),
+    commandAvailableAsync(plugin, plugin.settings.commands.codex),
+    commandAvailableAsync(plugin, plugin.settings.commands.opencode),
+  ]);
+  return {
+    nativeAvailable,
+    pythonAvailable,
+    selectedBackend: backend?.name,
+    selectedIsPty: backend?.isPty,
+    commands: {
+      claude,
+      codex,
+      opencode,
+    },
+  };
+}
+
 function spawnPythonBackend(plugin: EmbeddedAiTerminalPlugin, cwd: string): TerminalBackend {
   if (process.platform === "win32") {
     throw new Error("Python PTY is only available on POSIX platforms.");
@@ -362,7 +460,7 @@ function spawnPythonBackend(plugin: EmbeddedAiTerminalPlugin, cwd: string): Term
     ["-u", helperPath, plugin.settings.shellPath, JSON.stringify(parseArgs(plugin.settings.shellArgs)), cwd, "80", "24"],
     {
       cwd,
-      env: { ...process.env, TERM: "xterm-256color" },
+      env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
       stdio: ["pipe", "pipe", "pipe"],
     },
   );
@@ -386,8 +484,9 @@ function spawnNodePtyBackend(plugin: EmbeddedAiTerminalPlugin, cwd: string): Ter
     env: {
       ...process.env,
       TERM: "xterm-256color",
+      COLORTERM: "truecolor",
     },
-    name: "xterm-color",
+    name: "xterm-256color",
     rows: 24,
     ...(process.platform === "win32"
       ? {

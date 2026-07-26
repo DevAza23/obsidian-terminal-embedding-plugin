@@ -1,4 +1,4 @@
-import { ItemView, Menu, Modal, Notice, WorkspaceLeaf, type ViewStateResult } from "obsidian";
+import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, type ViewStateResult } from "obsidian";
 import { formatDiagnosticTime } from "./diagnostics";
 import { TerminalSession, makeSessionLabel } from "./session";
 import type EmbeddedAiTerminalPlugin from "./main";
@@ -478,7 +478,7 @@ export class TerminalHelpModal extends Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("vin-terminal-help-modal");
-    contentEl.createEl("h3", { text: "Embedded Terminal" });
+    new Setting(contentEl).setHeading().setName("Embedded terminal");
 
     const items: Array<[string, string]> = [
       ["+", "Open a fresh shell tab"],

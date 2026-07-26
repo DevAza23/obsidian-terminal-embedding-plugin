@@ -70,7 +70,6 @@ export class DiagnosticsStore {
     const output = `[embedded-ai-terminal:${input.scope}] ${input.summary}\n${detail}`;
     if (input.level === "error") console.error(output);
     else if (input.level === "warning") console.warn(output);
-    else console.info(output);
   }
 
   private notify(): void {

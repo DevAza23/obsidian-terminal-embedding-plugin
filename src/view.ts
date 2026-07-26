@@ -26,7 +26,6 @@ export class TerminalView extends ItemView {
   private pendingState: ViewStatePayload | null = null;
   private opened = false;
   private isRenaming = false;
-  private toolbarVisible = false;
   private unsubscribeDiagnostics: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: EmbeddedAiTerminalPlugin) {
@@ -67,19 +66,6 @@ export class TerminalView extends ItemView {
     container.addClass("vin-terminal-container");
     this.rootEl = container;
 
-    container.addEventListener("keydown", (event) => {
-      if (event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "t") {
-        event.preventDefault();
-        event.stopPropagation();
-        this.toggleToolbar();
-        return;
-      }
-
-      if (!event.metaKey) {
-        event.stopPropagation();
-      }
-    });
-
     container.addEventListener("wheel", (event) => {
       event.stopPropagation();
     });
@@ -93,6 +79,7 @@ export class TerminalView extends ItemView {
     });
 
     this.tabBarEl = container.createDiv({ cls: "vin-terminal-tab-bar" });
+    this.tabBarEl.setAttribute("tabindex", "-1");
     this.sessionActionsEl = container.createDiv({ cls: "vin-terminal-session-actions" });
     const newSessionButton = this.sessionActionsEl.createEl("button", {
       cls: "vin-terminal-new-session-button",
@@ -131,14 +118,8 @@ export class TerminalView extends ItemView {
     this.ensureSessionExists();
   }
 
-  private toggleToolbar(): void {
-    this.toolbarVisible = !this.toolbarVisible;
-    this.rootEl.toggleClass("is-toolbar-visible", this.toolbarVisible);
-    this.scheduleFit(40);
-  }
-
   toggleTabs(): void {
-    this.toggleToolbar();
+    this.tabBarEl.focus();
   }
 
   private scheduleFit(delay: number): void {
@@ -349,7 +330,7 @@ export class TerminalView extends ItemView {
     }
 
     this.tabBarEl.empty();
-    this.rootEl.toggleClass("has-multiple-sessions", this.sessions.length > 1);
+    this.rootEl.toggleClass("has-sessions", this.sessions.length > 0);
     const tabsScroll = this.tabBarEl.createDiv({ cls: "vin-terminal-tabs-scroll" });
 
     for (const session of this.sessions) {

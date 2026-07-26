@@ -63,7 +63,6 @@ export class FileCitationAutocomplete {
       }
 
       this.dismiss();
-      event.stopPropagation();
       return true;
     });
   }

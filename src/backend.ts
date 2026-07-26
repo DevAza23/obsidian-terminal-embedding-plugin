@@ -78,7 +78,7 @@ def main():
     cols = int(sys.argv[4])
     rows = int(sys.argv[5])
     if (os.path.isabs(shell) and not os.access(shell, os.X_OK)) or (not os.path.isabs(shell) and shutil.which(shell) is None):
-        print(f"Shell executable '{shell}' could not be found or is not executable.", file=sys.stderr, flush=True)
+        print(f"__VIN_SHELL_START_ERROR__:Shell executable '{shell}' could not be found or is not executable.", file=sys.stderr, flush=True)
         return 1
     pid, fd = pty.fork()
     if pid == 0:

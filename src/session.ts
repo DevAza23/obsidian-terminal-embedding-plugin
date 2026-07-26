@@ -135,7 +135,7 @@ export class TerminalSession {
         }
 
         const backendError = this.backend.getErrorDetail?.();
-        if (backendError && /FileNotFoundError|ENOENT|No such file/i.test(backendError)) {
+        if (backendError && /__VIN_SHELL_START_ERROR__|FileNotFoundError|ENOENT|No such file/i.test(backendError)) {
           this.term.write(`\r\n[Shell "${this.plugin.settings.shellPath}" could not be started. Check Shell executable in settings.]\r\n`);
         }
         this.term.write(`\r\n[process exited with code ${exitCode}]\r\n`);

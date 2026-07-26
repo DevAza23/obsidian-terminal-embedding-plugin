@@ -1,4 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
 import { createTerminalBackend, type BackendDisposable, type TerminalBackend } from "./backend";
 import { FileCitationAutocomplete } from "./citation";
@@ -40,6 +41,9 @@ export class TerminalSession {
   private startupFrame: number | null = null;
   private startupCommandTimer: number | null = null;
   private fitTimer: number | null = null;
+  private rendererAddon: { dispose(): void } | null = null;
+  private rendererContextLossDisposable: { dispose(): void } | null = null;
+  private rendererName = "DOM";
   private backendDataDisposable: BackendDisposable | null = null;
   private backendExitDisposable: BackendDisposable | null = null;
   private termDataDisposable: { dispose(): void } | null = null;
@@ -56,6 +60,10 @@ export class TerminalSession {
     this.containerEl = this.view.sessionsEl.createDiv({ cls: "vin-terminal-session" });
     this.hostEl = this.containerEl.createDiv({ cls: "vin-terminal-host" });
     this.statusEl = this.containerEl.createDiv({ cls: "vin-terminal-session-status" });
+    const ownerWindow = this.containerEl.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      throw new Error("The terminal document has no window.");
+    }
     this.setStatus(`Starting ${this.name}...`);
     let terminal: Terminal | undefined;
     let backend: TerminalBackend | undefined;
@@ -64,7 +72,7 @@ export class TerminalSession {
         allowTransparency: false,
         convertEol: true,
         cursorBlink: this.plugin.settings.cursorBlink,
-        customGlyphs: false,
+        customGlyphs: true,
         fontFamily: getTerminalFontFamily(),
         fontSize: this.plugin.settings.fontSize,
         fontWeight: "400",
@@ -79,6 +87,7 @@ export class TerminalSession {
       this.term = terminal;
       this.term.loadAddon(this.fitAddon);
       this.term.open(this.hostEl);
+      this.initializeRenderer();
 
       backend = createTerminalBackend(this.plugin, this.plugin.settings.backend, this.cwd);
       this.backend = backend;
@@ -144,7 +153,7 @@ export class TerminalSession {
       });
 
       this.installDropHandlers();
-      this.startupWarningTimer = window.setTimeout(() => {
+      this.startupWarningTimer = ownerWindow.setTimeout(() => {
         if (this.disposed || this.hasReceivedOutput) {
           return;
         }
@@ -166,7 +175,7 @@ export class TerminalSession {
         });
       }, 2200);
 
-      this.startupFrame = requestAnimationFrame(() => {
+      this.startupFrame = ownerWindow.requestAnimationFrame(() => {
         this.startupFrame = null;
         if (this.disposed) return;
         this.fit();
@@ -176,7 +185,7 @@ export class TerminalSession {
           ...this.startupCommand.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
         ];
         if (startupLines.length) {
-          this.startupCommandTimer = window.setTimeout(() => {
+          this.startupCommandTimer = ownerWindow.setTimeout(() => {
             this.startupCommandTimer = null;
             if (this.disposed) return;
             for (const line of startupLines) {
@@ -186,7 +195,7 @@ export class TerminalSession {
         }
       });
 
-      this.fitTimer = window.setTimeout(() => {
+      this.fitTimer = ownerWindow.setTimeout(() => {
         this.fitTimer = null;
         if (!this.disposed) {
           this.fit();
@@ -233,9 +242,12 @@ export class TerminalSession {
       return;
     }
 
+    const previousCols = this.term.cols;
+    const previousRows = this.term.rows;
     this.fitAddon.fit();
-    this.backend.resize(this.term.cols, this.term.rows);
-    this.term.refresh(0, this.term.rows - 1);
+    if (this.term.cols !== previousCols || this.term.rows !== previousRows) {
+      this.backend.resize(this.term.cols, this.term.rows);
+    }
   }
 
   show(): void {
@@ -252,7 +264,7 @@ export class TerminalSession {
     this.term.options.theme = getTerminalTheme(this.containerEl);
     this.term.options.fontSize = this.plugin.settings.fontSize;
     this.term.options.cursorBlink = this.plugin.settings.cursorBlink;
-    this.fit();
+    this.term.clearTextureAtlas();
   }
 
   sendText(text: string, appendEnter = true): void {
@@ -332,13 +344,16 @@ export class TerminalSession {
 
     this.disposed = true;
     this.clearStartupWarningTimer();
-    if (this.startupFrame !== null) cancelAnimationFrame(this.startupFrame);
-    if (this.startupCommandTimer !== null) window.clearTimeout(this.startupCommandTimer);
-    if (this.fitTimer !== null) window.clearTimeout(this.fitTimer);
+    const view = this.containerEl.ownerDocument.defaultView;
+    if (this.startupFrame !== null) view?.cancelAnimationFrame(this.startupFrame);
+    if (this.startupCommandTimer !== null) view?.clearTimeout(this.startupCommandTimer);
+    if (this.fitTimer !== null) view?.clearTimeout(this.fitTimer);
     this.backendDataDisposable?.dispose();
     this.backendExitDisposable?.dispose();
     this.termDataDisposable?.dispose();
     this.citationAutocomplete.destroy();
+    this.rendererContextLossDisposable?.dispose();
+    this.rendererAddon?.dispose();
     try {
       this.backend.dispose();
     } catch {
@@ -356,8 +371,54 @@ export class TerminalSession {
 
   private clearStartupWarningTimer(): void {
     if (this.startupWarningTimer !== null) {
-      window.clearTimeout(this.startupWarningTimer);
+      this.containerEl.ownerDocument.defaultView?.clearTimeout(this.startupWarningTimer);
       this.startupWarningTimer = null;
     }
+  }
+
+  private initializeRenderer(): void {
+    this.rendererContextLossDisposable?.dispose();
+    this.rendererContextLossDisposable = null;
+    this.rendererAddon?.dispose();
+    this.rendererAddon = null;
+    this.rendererName = "DOM";
+
+    let webglAddon: WebglAddon | null = null;
+    try {
+      const addon = new WebglAddon();
+      webglAddon = addon;
+      this.term.loadAddon(addon);
+      this.rendererAddon = addon;
+      this.rendererName = "WebGL";
+      this.rendererContextLossDisposable = addon.onContextLoss(() => this.handleRendererContextLoss());
+    } catch (webglError) {
+      webglAddon?.dispose();
+      this.rendererAddon = null;
+      this.plugin.recordDiagnostic({
+        level: "warning",
+        scope: "renderer",
+        summary: `${this.name} is using the DOM renderer.`,
+        detail: `WebGL renderer was unavailable. ${String(webglError)}`,
+      });
+    }
+
+    this.plugin.recordDiagnostic({
+      level: "info",
+      scope: "renderer",
+      summary: `${this.name} is using the ${this.rendererName} renderer.`,
+    });
+  }
+
+  private handleRendererContextLoss(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.plugin.recordDiagnostic({
+      level: "warning",
+      scope: "renderer",
+      summary: `${this.name} lost its accelerated renderer; restoring the terminal buffer.`,
+    });
+    this.initializeRenderer();
+    this.term.refresh(0, this.term.rows - 1);
   }
 }

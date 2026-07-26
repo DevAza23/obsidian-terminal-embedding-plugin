@@ -124,6 +124,7 @@ export default class EmbeddedAiTerminalPlugin extends Plugin {
     this.withActiveView((view) => {
       for (const session of view.sessions) {
         session.updateTheme();
+        session.fit();
       }
     });
   }

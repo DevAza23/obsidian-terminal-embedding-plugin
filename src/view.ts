@@ -1,4 +1,5 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, type ViewStateResult } from "obsidian";
+import { getBackendReadiness, type BackendReadiness } from "./backend";
 import { formatDiagnosticTime } from "./diagnostics";
 import { TerminalSession, makeSessionLabel } from "./session";
 import type EmbeddedAiTerminalPlugin from "./main";
@@ -14,6 +15,9 @@ export class TerminalView extends ItemView {
   private emptyStateEl!: HTMLElement;
   private rootEl!: HTMLElement;
   private resizeObserver: ResizeObserver | null = null;
+  private fitTimer: number | null = null;
+  private readinessEl!: HTMLElement;
+  private readiness: BackendReadiness | null = null;
   private diagnosticsEl!: HTMLElement;
   private pendingState: ViewStatePayload | null = null;
   private opened = false;
@@ -85,15 +89,17 @@ export class TerminalView extends ItemView {
     });
 
     this.tabBarEl = container.createDiv({ cls: "vin-terminal-tab-bar" });
+    this.readinessEl = container.createDiv({ cls: "vin-terminal-readiness" });
     this.diagnosticsEl = container.createDiv({ cls: "vin-terminal-diagnostics" });
     this.emptyStateEl = container.createDiv({ cls: "vin-terminal-empty-state" });
     this.sessionsEl = container.createDiv({ cls: "vin-terminal-sessions" });
     this.unsubscribeDiagnostics = this.plugin.subscribeDiagnostics(() => this.renderDiagnostics());
     this.renderDiagnostics();
+    this.renderReadiness(true);
     this.renderEmptyState();
 
     this.resizeObserver = new ResizeObserver(() => {
-      this.contentEl.ownerDocument.defaultView?.setTimeout(() => this.activeSession?.fit(), 50);
+      this.scheduleFit(50);
     });
     this.resizeObserver.observe(this.sessionsEl);
 
@@ -116,13 +122,85 @@ export class TerminalView extends ItemView {
   private toggleToolbar(): void {
     this.toolbarVisible = !this.toolbarVisible;
     this.rootEl.toggleClass("is-toolbar-visible", this.toolbarVisible);
-    this.contentEl.ownerDocument.defaultView?.setTimeout(() => this.activeSession?.fit(), 40);
+    this.scheduleFit(40);
+  }
+
+  private scheduleFit(delay: number): void {
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      return;
+    }
+    this.clearScheduledFit();
+    this.fitTimer = ownerWindow.setTimeout(() => {
+      this.fitTimer = null;
+      this.activeSession?.fit();
+    }, delay);
+  }
+
+  private clearScheduledFit(): void {
+    if (this.fitTimer !== null) {
+      this.contentEl.ownerDocument.defaultView?.clearTimeout(this.fitTimer);
+      this.fitTimer = null;
+    }
+  }
+
+  private renderReadiness(refresh = false): void {
+    if (!this.readinessEl) {
+      return;
+    }
+    if (refresh || !this.readiness) {
+      this.readiness = getBackendReadiness(this.plugin, this.activeSession?.backend);
+    } else {
+      this.readiness = {
+        ...this.readiness,
+        selectedBackend: this.activeSession?.backend.name,
+        selectedIsPty: this.activeSession?.backend.isPty,
+      };
+    }
+    const readiness = this.readiness;
+    const limited = readiness.selectedIsPty === false;
+    this.readinessEl.empty();
+    this.readinessEl.toggleClass("is-limited", limited);
+    this.readinessEl.createDiv({
+      cls: "vin-terminal-readiness-title",
+      text: readiness.selectedBackend ? (limited ? "Limited terminal mode" : "Terminal ready") : "Terminal readiness",
+    });
+    this.readinessEl.createDiv({
+      cls: "vin-terminal-readiness-description",
+      text: readiness.selectedBackend
+        ? (limited
+          ? "Regular commands can run, but full-screen apps such as Codex, Claude Code, and OpenCode may not work here. Install the matching native bundle from the release page for full terminal support."
+          : `Full terminal support is active (${readiness.selectedBackend}).`)
+        : (readiness.nativeAvailable || readiness.pythonAvailable
+          ? "The terminal can start with full terminal support."
+          : "The terminal will use basic command mode. Install the matching native bundle from the release page for full-screen app support."),
+    });
+    const missing = (Object.entries(readiness.commands) as Array<[keyof typeof readiness.commands, boolean]>)
+      .filter(([, available]) => !available)
+      .map(([name]) => name);
+    if (missing.length) {
+      this.readinessEl.createDiv({
+        cls: "vin-terminal-readiness-missing",
+        text: `Not found on PATH: ${missing.join(", ")}.`,
+      });
+    }
+    const details = this.readinessEl.createEl("details", { cls: "vin-terminal-readiness-details" });
+    details.createEl("summary", { text: "Technical details" });
+    details.createEl("pre", {
+      text: [
+        `Native backend available: ${readiness.nativeAvailable}`,
+        `Python backend available: ${readiness.pythonAvailable}`,
+        `Selected backend: ${readiness.selectedBackend ?? "not started"}`,
+        `Commands: ${Object.entries(readiness.commands).map(([name, available]) => `${name}=${available}`).join(", ")}`,
+      ].join("\n"),
+    });
   }
 
   async onClose(): Promise<void> {
     this.opened = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.clearScheduledFit();
     this.unsubscribeDiagnostics?.();
     this.unsubscribeDiagnostics = null;
     for (const session of this.sessions) {
@@ -161,6 +239,7 @@ export class TerminalView extends ItemView {
     session.name = makeSessionLabel(profileId, id);
     this.sessions.push(session);
     this.switchTo(session);
+    this.renderReadiness(true);
     this.renderTabs();
     this.renderEmptyState();
     this.plugin.requestLayoutSave();
@@ -177,6 +256,7 @@ export class TerminalView extends ItemView {
     this.activeSession?.hide();
     this.activeSession = session;
     session.show();
+    this.renderReadiness(false);
     this.renderTabs();
     this.renderEmptyState();
     this.plugin.requestLayoutSave();

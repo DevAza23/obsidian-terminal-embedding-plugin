@@ -27,6 +27,7 @@ export class TerminalSession {
   private fitTimer: number | null = null;
   private ptyDataDisposable: IDisposable | null = null;
   private ptyExitDisposable: IDisposable | null = null;
+  private termDataDisposable: { dispose(): void } | null = null;
 
   constructor(
     private readonly plugin: EmbeddedAiTerminalPlugin,
@@ -88,7 +89,7 @@ export class TerminalSession {
         this.containerEl,
       );
 
-      this.term.onData((data) => {
+      this.termDataDisposable = this.term.onData((data) => {
         this.citationAutocomplete.handleData(data);
         this.ptyProcess.write(data);
       });
@@ -320,6 +321,7 @@ export class TerminalSession {
     if (this.fitTimer !== null) window.clearTimeout(this.fitTimer);
     this.ptyDataDisposable?.dispose();
     this.ptyExitDisposable?.dispose();
+    this.termDataDisposable?.dispose();
     this.citationAutocomplete.destroy();
     try {
       this.ptyProcess.kill();

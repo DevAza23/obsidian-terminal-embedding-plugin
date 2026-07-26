@@ -491,7 +491,7 @@ export class TerminalHelpModal extends Modal {
       ["OpenCode", "Open a new tab and run the configured OpenCode command"],
       ["Double-click tab", "Rename a terminal tab"],
       ["Right-click tab", "Rename or close a tab"],
-      ["Drop files", "Paste Windows file paths into the terminal"],
+      ["Drop files", "Paste file paths into the terminal"],
     ];
 
     const table = contentEl.createEl("table");

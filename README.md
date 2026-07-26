@@ -27,6 +27,8 @@ The **PTY backend** setting defaults to **Auto** and tries these backends in ord
 
 Store installation on Linux and macOS can therefore use the Python PTY when a usable Python interpreter is available. Store installation on Windows falls back to pipe mode; install the Windows native bundle for proper terminal behavior.
 
+The Python helper is cleaned up on normal plugin unload and uses a parent-death signal on Linux so a hard process death does not leave its shell behind. macOS does not provide that Linux `prctl` signal; normal quit cleanup is covered there, but a crash or `SIGKILL` can still orphan a helper until it is stopped manually.
+
 The terminal uses xterm's WebGL renderer when the Obsidian window supports it, then falls back to the standard DOM renderer. Renderer failures and WebGL context loss do not terminate the terminal process. Each session creates its own renderer, including sessions opened in popout windows.
 
 ## Installation
@@ -126,7 +128,7 @@ Use the command palette:
 - **Open embedded terminal pane**
 - **Open embedded terminal in new tab**
 
-Inside a terminal view, press `Ctrl+T` to toggle the top bar.
+The session tab bar is visible whenever a terminal session exists. Use the **Toggle terminal session tabs** command if you want to focus it from the command palette.
 
 ### Start AI CLI tabs
 

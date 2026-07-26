@@ -16,6 +16,13 @@
 - split terminal, session, settings, diagnostics, platform, theme, and citation logic into focused modules
 - fixed POSIX shell defaults, path quoting, vault path handling, citation ranking, and terminal lifecycle cleanup
 - added typecheck tooling and cross-platform release packaging
+- resolved `--font-monospace` to a concrete fallback font stack because CSS `var()` cannot be used in the canvas font string xterm measures and rasterizes with, fixing DOM cell metrics and box-drawing glyphs
+- fixed font-size changes so existing sessions repaint and refit their PTYs
+- fixed session teardown on plugin unload and made the Python helper terminate with its process group, including Linux parent-death protection
+- made the terminal tab bar always visible instead of relying on Ctrl+T, and fixed tab rename reconciliation and persistence
+- prevented citation dropdown keys from reaching Obsidian hotkeys while the dropdown is open
+- added a plain-language shell-start failure message while retaining the raw helper error in diagnostics
+- added a modest contrast floor for ANSI white and bright-white foregrounds while preserving white background semantics
 
 ## 0.1.1 - Pane Recovery
 

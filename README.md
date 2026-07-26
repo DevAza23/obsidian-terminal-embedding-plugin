@@ -2,188 +2,64 @@
 
 An Obsidian desktop plugin that embeds a real terminal inside a pane, with support for AI coding CLIs such as Codex, Claude Code, and OpenCode.
 
-The plugin is Windows-first and uses a PTY-backed terminal UI inside Obsidian.
-
-## Latest Release
-
-`0.1.1 - Pane Recovery`
-
-Short release name:
-
-`Pane Recovery`
-
-This patch fixes a blank terminal pane issue and adds visible diagnostics for session startup problems.
-
-## License
-
-This project is open source under the MIT license.
-
-See [LICENSE](./LICENSE).
+The plugin uses a PTY-backed terminal and supports Windows, macOS, and Linux. The native `node-pty` installation path remains platform- and Electron-ABI-specific.
 
 ## Features
 
 - Embedded terminal inside Obsidian
 - Multi-tab terminal sessions
-- Commands to open new shell / Codex / Claude / OpenCode tabs
+- Commands to open shell, Codex, Claude, and OpenCode tabs
 - `[[...]]` file citation picker from your vault
 - Drag and drop files into the terminal to paste paths
-- Minimal top bar with `Ctrl+T` toggle
-- Community-plugin style install layout for Obsidian
+- Obsidian theme integration
+- POSIX shell defaults with login and interactive startup
 
-## Screenshots
+## Installation
 
-<!-- Demo screenshots: replace the paths below with your real screenshot files -->
-<!-- Example:
-![Terminal demo](./docs/demo-terminal.png)
-![Citation picker demo](./docs/demo-citation.png)
--->
-<img width="1910" height="1131" alt="image 2 1" src="https://github.com/user-attachments/assets/5ca41d1e-311d-4624-a91e-3c8df7bbadba" />
+### Community Plugins
 
-
-
-
-## Download
-
-If you publish releases, attach the plugin zip from:
-
-`release/embedded-ai-terminal.zip`
-
-Users can then:
-
-1. Download the zip
-2. Extract it into their vault at:
-   `.obsidian/plugins/embedded-ai-terminal/`
-3. Restart Obsidian or reload community plugins
-4. Enable `Embedded AI Terminal` in `Settings -> Community plugins`
-
-## Updating
-
-When shipping an update, replace the installed plugin files in:
-
-`.obsidian/plugins/embedded-ai-terminal/`
-
-At minimum update:
+After the plugin is accepted into the Obsidian Community Plugin directory, install it from **Settings → Community plugins**. Obsidian downloads the standard plugin files:
 
 - `main.js`
+- `manifest.json`
 - `styles.css`
-- `manifest.json`
-- `versions.json`
 
-If the release includes native dependency changes, also replace:
+This store installation is the JavaScript/plugin layer. The current terminal backend still requires a native `node-pty` runtime, so a store installation may report that the native runtime is unavailable until the native backend work is completed.
 
-- `node_modules/`
+### Manual native installation
 
-After copying the new files:
-
-1. Reload community plugins or restart Obsidian
-2. Re-open the `Embedded AI Terminal` pane
-
-Do not install the plugin into a random folder name like `New folder`. The installed folder should match the plugin id:
+Download the platform-specific bundle from the GitHub release matching your operating system and CPU architecture, then extract it into:
 
 `.obsidian/plugins/embedded-ai-terminal/`
 
-## Manual Install
+The bundle contains:
 
-Copy these files and folders into:
-
-`.obsidian/plugins/embedded-ai-terminal/`
-
-Required:
-
-- `manifest.json`
 - `main.js`
+- `manifest.json`
 - `styles.css`
-- `versions.json`
-- `node_modules/`
+- the matching `node-pty` JavaScript and native runtime files
 
-Important:
+Available bundle names use this format:
 
-- This plugin depends on native modules, so copying only `main.js` is not enough.
-- The `node_modules` folder must be present in the installed plugin directory.
+`embedded-ai-terminal-<platform>-<architecture>.zip`
+
+For example:
+
+`embedded-ai-terminal-linux-x64.zip`
+
+Restart Obsidian or reload community plugins, then enable **Embedded AI Terminal** in **Settings → Community plugins**.
+
+### BRAT
+
+BRAT installs the same standard release assets as the Community Plugin directory. It does not install `node_modules` or native `.node` files, so it is useful for testing the JavaScript layer but does not replace the platform-specific native bundle.
 
 ## Development
 
-### 1. Install dependencies
+Install dependencies:
 
 ```bash
 npm install
 ```
-
-### 2. Build
-
-```bash
-npm run build
-```
-
-For a type-only check without writing JavaScript files:
-
-```bash
-npm run typecheck
-```
-
-### 3. Watch mode
-
-```bash
-npm run dev
-```
-
-## Local Testing in Obsidian
-
-After building, copy the project output into your vault plugin folder:
-
-`.obsidian/plugins/embedded-ai-terminal/`
-
-Then in Obsidian:
-
-1. Open `Settings -> Community plugins`
-2. Disable safe mode if needed
-3. Reload plugins
-4. Enable `Embedded AI Terminal`
-
-## Usage
-
-### Open the terminal
-
-Use the command palette and run:
-
-- `Open embedded terminal pane`
-- `Open embedded terminal in new tab`
-
-### Show or hide the top bar
-
-Inside the terminal view, press:
-
-`Ctrl+T`
-
-### Start AI CLI tabs
-
-Use the command palette:
-
-- `New shell terminal tab`
-- `New Codex terminal tab`
-- `New Claude terminal tab`
-- `New OpenCode terminal tab`
-
-### Cite vault files
-
-Inside the terminal, type:
-
-`[[`
-
-This opens a picker of notes from your vault and inserts a wiki-style path reference.
-
-## Settings
-
-The plugin settings include:
-
-- shell executable (PowerShell on Windows, or `$SHELL` with a POSIX fallback elsewhere)
-- shell arguments
-- default working directory
-- font size
-- startup commands
-- provider command strings for Codex / Claude / OpenCode / custom
-
-## Packaging a Release
 
 Build the plugin:
 
@@ -191,55 +67,104 @@ Build the plugin:
 npm run build
 ```
 
-Then package the installable plugin folder or zip:
+Run the type checker without writing JavaScript files:
 
 ```bash
+npm run typecheck
+```
+
+Watch and rebuild during development:
+
+```bash
+npm run dev
+```
+
+The generated `main.js` is intentionally not committed. Build it before copying the plugin into a vault or creating a release.
+
+## Native runtime and Electron ABI
+
+`node-pty` is a native module. It must be compiled or packaged for the operating system, CPU architecture, and Electron ABI used by the installed Obsidian desktop build.
+
+If Obsidian updates Electron, an existing native binary can stop loading with a module-version or ABI-mismatch error. Download the matching platform bundle from the latest release rather than copying only `main.js`.
+
+The release workflow publishes the three standard Obsidian files individually and also publishes the native bundle produced on the workflow runner. Platform-specific release bundles should be built on the corresponding platform.
+
+## Packaging
+
+Build first, then create a platform-specific native bundle:
+
+```bash
+npm run build
 npm run package:release
 ```
 
-The packaging script uses PowerShell on Windows and `zip` on POSIX systems.
-If neither archive mechanism is available, it reports the required dependency.
+The packaging script includes only the plugin files and the `node-pty` runtime files needed for the current platform and architecture. On POSIX systems it requires the `zip` command; on Windows it uses PowerShell `Compress-Archive`. If no archive mechanism is available, the script reports the required dependency.
+
+## Usage
+
+### Open the terminal
+
+Use the command palette:
+
+- **Open embedded terminal pane**
+- **Open embedded terminal in new tab**
+
+Inside a terminal view, press `Ctrl+T` to toggle the top bar.
+
+### Start AI CLI tabs
+
+Use the command palette:
+
+- **New shell terminal tab**
+- **New Codex terminal tab**
+- **New Claude terminal tab**
+- **New OpenCode terminal tab**
+
+### Cite vault files
+
+Inside the terminal, type:
+
+`[[`
+
+This opens a picker of Markdown notes from your vault and inserts a wiki-style path reference.
+
+## Settings
+
+The plugin settings include:
+
+- shell executable (`powershell.exe` on Windows, or `$SHELL` with a POSIX fallback)
+- shell arguments
+- default working directory
+- font size
+- startup commands
+- provider command strings for Codex, Claude, OpenCode, and custom commands
+
+On POSIX systems, the default shell arguments are `-il` so login and interactive startup configuration is loaded. Custom shell arguments are preserved exactly when configured.
+
+## Troubleshooting
+
+### Blank terminal or native module error
+
+Confirm that the plugin directory contains the platform-specific bundle, including:
 
 - `manifest.json`
 - `main.js`
 - `styles.css`
-- `versions.json`
-- `node_modules/`
+- `node_modules/node-pty/`
 
-Recommended release asset:
+If the error mentions a module version, ABI, or native binary mismatch:
 
-- `embedded-ai-terminal.zip`
+1. Check the installed Obsidian desktop version.
+2. Download a fresh bundle built for the same operating system and architecture.
+3. Replace the entire plugin folder rather than only `main.js`.
+4. Restart Obsidian.
 
-Recommended release title:
+The native runtime must match Obsidian's Electron ABI; a binary built by ordinary system Node or copied from another Obsidian/Electron release may not load.
 
-- `0.1.1 - Pane Recovery`
+### Shell command not found on Linux or macOS
 
-Recommended short summary:
+The default shell starts as a login, interactive shell so normal shell startup files can add tools to `PATH`. If a custom shell or custom shell arguments are configured, verify that those arguments source the expected profile and that the CLI is available from that shell.
 
-- Fixes a blank terminal pane on startup and adds visible diagnostics for terminal session failures.
+## License
 
-## Notes
-
-- This plugin currently targets desktop Obsidian.
-- The terminal implementation is Windows-first.
-- If native module loading fails in Obsidian, verify that the installed plugin folder contains `node_modules/node-pty`.
-
-## Troubleshooting
-
-### Blank terminal pane
-
-If the pane opens but looks empty:
-
-1. Make sure the plugin is installed in:
-   `.obsidian/plugins/embedded-ai-terminal/`
-2. Confirm the folder contains:
-   `manifest.json`, `main.js`, `styles.css`, `versions.json`, and `node_modules/`
-3. Reload community plugins or restart Obsidian
-4. Open the terminal pane again and check the in-pane diagnostics section
-
-### Native module issues
-
-If `node-pty` fails to load:
-
-- verify that `node_modules/node-pty/` exists in the installed plugin folder
-- reinstall or replace the packaged plugin files instead of copying only `main.js`
+This project is open source under the MIT license. See [LICENSE](./LICENSE).

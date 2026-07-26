@@ -4,17 +4,12 @@ const { execFileSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
 const releaseDir = path.join(root, "release");
-const stageDir = path.join(releaseDir, "embedded-ai-terminal");
-const zipPath = path.join(releaseDir, "embedded-ai-terminal.zip");
-
-const filesToCopy = [
-  "manifest.json",
-  "main.js",
-  "styles.css",
-  "versions.json",
-  "LICENSE",
-  "README.md",
-];
+const platform = process.platform;
+const arch = process.arch;
+const bundleName = `embedded-ai-terminal-${platform}-${arch}`;
+const stageDir = path.join(releaseDir, bundleName);
+const zipPath = path.join(releaseDir, `${bundleName}.zip`);
+const pluginFiles = ["manifest.json", "main.js", "styles.css"];
 
 function removeIfExists(targetPath) {
   if (fs.existsSync(targetPath)) {
@@ -36,28 +31,71 @@ function copyRecursive(source, destination) {
   fs.copyFileSync(source, destination);
 }
 
+function copyRuntimeTree(source, destination) {
+  const stat = fs.statSync(source);
+  if (stat.isDirectory()) {
+    for (const entry of fs.readdirSync(source)) {
+      copyRuntimeTree(path.join(source, entry), path.join(destination, entry));
+    }
+    return;
+  }
+
+  if (source.endsWith(".map") || source.endsWith(".pdb") || /\.test\.js$/.test(source)) {
+    return;
+  }
+
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.copyFileSync(source, destination);
+}
+
+function copyNodePtyRuntime() {
+  const nodePtyDir = path.join(root, "node_modules", "node-pty");
+  const destination = path.join(stageDir, "node_modules", "node-pty");
+  if (!fs.existsSync(nodePtyDir)) {
+    throw new Error("Unable to package release: install dependencies before packaging.");
+  }
+
+  copyRuntimeTree(path.join(nodePtyDir, "lib"), path.join(destination, "lib"));
+  copyRecursive(path.join(nodePtyDir, "package.json"), path.join(destination, "package.json"));
+
+  const buildNativeDir = path.join(nodePtyDir, "build", "Release");
+  const prebuildDir = path.join(nodePtyDir, "prebuilds", `${platform}-${arch}`);
+  const nativeDir = fs.existsSync(path.join(buildNativeDir, "pty.node")) ? buildNativeDir : prebuildDir;
+  if (!fs.existsSync(nativeDir)) {
+    throw new Error(`Unable to package release: no node-pty binary found for ${platform}-${arch}.`);
+  }
+
+  const relativeNativeDir = nativeDir === buildNativeDir
+    ? path.join("build", "Release")
+    : path.join("prebuilds", `${platform}-${arch}`);
+  copyRuntimeTree(nativeDir, path.join(destination, relativeNativeDir));
+}
+
 removeIfExists(stageDir);
 removeIfExists(zipPath);
 fs.mkdirSync(stageDir, { recursive: true });
 
-for (const relativePath of filesToCopy) {
+for (const relativePath of pluginFiles) {
   copyRecursive(path.join(root, relativePath), path.join(stageDir, relativePath));
 }
-
-copyRecursive(path.join(root, "node_modules"), path.join(stageDir, "node_modules"));
+copyNodePtyRuntime();
 
 try {
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     execFileSync(
       "powershell.exe",
-      ["-NoLogo", "-NoProfile", "-Command", "Compress-Archive -Path .\\embedded-ai-terminal -DestinationPath .\\embedded-ai-terminal.zip -Force"],
+      ["-NoLogo", "-NoProfile", "-Command", `Compress-Archive -Path .\\${bundleName} -DestinationPath .\\${path.basename(zipPath)} -Force`],
       { cwd: releaseDir, stdio: "inherit" },
     );
   } else {
-    execFileSync("zip", ["-qr", zipPath, "embedded-ai-terminal"], { cwd: releaseDir, stdio: "inherit" });
+    execFileSync("zip", ["-qr", zipPath, bundleName], { cwd: releaseDir, stdio: "inherit" });
   }
 } catch (error) {
-  throw new Error(`Unable to create release archive. Install the ${process.platform === "win32" ? "PowerShell Compress-Archive support" : "zip command"} and try again. ${error instanceof Error ? error.message : String(error)}`);
+  throw new Error(
+    `Unable to create release archive. Install the ${platform === "win32" ? "PowerShell Compress-Archive support" : "zip command"} and try again. ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  );
 }
 
 console.log(`Created ${zipPath}`);

@@ -13,6 +13,9 @@ The plugin uses a PTY-backed terminal and supports Windows, macOS, and Linux. Th
 - Drag and drop files into the terminal to paste paths
 - Obsidian theme integration
 - POSIX shell defaults with login and interactive startup
+- WebGL rendering with a DOM fallback
+- truecolor terminal capability signaling for real PTY sessions
+- contrast-aware ANSI colors and custom glyph support for box-drawing and Powerline output
 
 ## Terminal backends
 
@@ -23,6 +26,8 @@ The **PTY backend** setting defaults to **Auto** and tries these backends in ord
 3. **Pipe mode** — the last-resort fallback, available wherever the shell can start. It has no terminal device, so full-screen TUIs and applications that require a PTY may render incorrectly. The session status and diagnostics identify this degradation and recommend installing the native bundle.
 
 Store installation on Linux and macOS can therefore use the Python PTY when a usable Python interpreter is available. Store installation on Windows falls back to pipe mode; install the Windows native bundle for proper terminal behavior.
+
+The terminal uses xterm's WebGL renderer when the Obsidian window supports it, then falls back to the standard DOM renderer. Renderer failures and WebGL context loss do not terminate the terminal process. Each session creates its own renderer, including sessions opened in popout windows.
 
 ## Installation
 
@@ -150,6 +155,9 @@ The plugin settings include:
 - font size
 - startup commands
 - provider command strings for Codex, Claude, OpenCode, and custom commands
+- PTY backend preference for newly opened tabs
+
+The terminal shows a readiness panel after startup. It reports whether the session has full terminal support, whether the configured Codex, Claude Code, and OpenCode commands are on `PATH`, and the one action to take if the installation is limited. Technical backend, renderer, ABI, and process details remain available under **Technical details**.
 
 On POSIX systems, the default shell arguments are `-il` so login and interactive startup configuration is loaded. Custom shell arguments are preserved exactly when configured.
 
@@ -176,6 +184,10 @@ The native runtime must match Obsidian's Electron ABI; a binary built by ordinar
 ### Shell command not found on Linux or macOS
 
 The default shell starts as a login, interactive shell so normal shell startup files can add tools to `PATH`. If a custom shell or custom shell arguments are configured, verify that those arguments source the expected profile and that the CLI is available from that shell.
+
+### Limited terminal mode
+
+If the readiness panel says **Limited terminal mode**, the session is using the pipe fallback. Regular shell commands can still run, but full-screen applications such as Codex, Claude Code, and OpenCode require a real PTY. Download and extract the matching native bundle from the release page, then reload Obsidian. On Linux and macOS, installing a Python interpreter with the standard-library `pty` module also enables the store-compatible full terminal path.
 
 ## License
 

@@ -89,6 +89,8 @@ If Obsidian updates Electron, an existing native binary can stop loading with a 
 
 The release workflow publishes the three standard Obsidian files individually and also publishes the native bundle produced on the workflow runner. Platform-specific release bundles should be built on the corresponding platform.
 
+To enable automated releases, copy [`docs/release-workflow.yml`](./docs/release-workflow.yml) to `.github/workflows/release.yml`. You can do this through the GitHub web UI if your token cannot create workflow files.
+
 ## Packaging
 
 Build first, then create a platform-specific native bundle:

@@ -13,17 +13,57 @@ export function getShellDefaults(): { shellPath: string; shellArgs: string } {
 
   return {
     shellPath: process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/sh"),
-    shellArgs: "",
+    shellArgs: "-il",
   };
 }
 
 export function parseArgs(argsText: string): string[] {
   const args: string[] = [];
-  const matcher = /[^\s"]+|"([^"]*)"/g;
-  let match: RegExpExecArray | null;
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+  let started = false;
 
-  while ((match = matcher.exec(argsText)) !== null) {
-    args.push(match[1] ?? match[0]);
+  for (const character of argsText) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+      started = true;
+      continue;
+    }
+    if (character === "\\" && process.platform !== "win32" && quote !== "'") {
+      escaped = true;
+      started = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+      } else {
+        current += character;
+      }
+      started = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      started = true;
+    } else if (/\s/.test(character)) {
+      if (started) {
+        args.push(current);
+        current = "";
+        started = false;
+      }
+    } else {
+      current += character;
+      started = true;
+    }
+  }
+  if (escaped) {
+    current += "\\";
+  }
+  if (started) {
+    args.push(current);
   }
 
   return args;
@@ -42,7 +82,7 @@ export function getVaultBase(app: App): string {
   return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : "";
 }
 
-function getPluginInstallDir(plugin: EmbeddedAiTerminalPlugin): string {
+export function getPluginInstallDir(plugin: EmbeddedAiTerminalPlugin): string {
   const manifestDir = (plugin.manifest as { dir?: string }).dir ?? "";
   if (!manifestDir) {
     return "";

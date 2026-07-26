@@ -1,0 +1,113 @@
+name: Release Obsidian plugin
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "$(node -p "require('./manifest.json').version")"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Upload store files
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-files
+          path: |
+            main.js
+            manifest.json
+            styles.css
+
+  build-native:
+    needs: build-store
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate release version
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$RELEASE_TAG" = "$(node -p "require('./manifest.json').version")"
+
+      - name: Build plugin
+        run: npm run build
+
+      - name: Package native runtime
+        run: npm run package:release
+
+      - name: Upload native bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.os }}
+          path: release/*.zip
+
+  release:
+    needs:
+      - build-store
+      - build-native
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble release assets
+        run: |
+          mkdir release-assets
+          find artifacts -type f \( -name "main.js" -o -name "manifest.json" -o -name "styles.css" -o -name "*.zip" \) -exec cp {} release-assets/ \;
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title="$GITHUB_REF_NAME" \
+            --generate-notes \
+            release-assets/main.js \
+            release-assets/manifest.json \
+            release-assets/styles.css \
+            release-assets/*.zip

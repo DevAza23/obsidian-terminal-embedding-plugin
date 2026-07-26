@@ -1,9 +1,10 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import type { IPty, IDisposable } from "node-pty";
+import { createTerminalBackend, type BackendDisposable, type TerminalBackend } from "./backend";
 import { FileCitationAutocomplete } from "./citation";
 import { formatDiagnosticContext } from "./diagnostics";
-import { loadNodePty, parseArgs, quotePath } from "./platform";
+import { quotePath } from "./platform";
 import { getTerminalFontFamily, getTerminalTheme } from "./theme";
 import type EmbeddedAiTerminalPlugin from "./main";
 import type { ProfileId, SavedSessionState } from "./types";
@@ -30,7 +31,7 @@ export class TerminalSession {
   readonly statusEl: HTMLElement;
   readonly fitAddon = new FitAddon();
   readonly term: Terminal;
-  readonly ptyProcess: IPty;
+  readonly backend: TerminalBackend;
   readonly citationAutocomplete: FileCitationAutocomplete;
   name: string;
   hasActivity = false;
@@ -40,8 +41,11 @@ export class TerminalSession {
   private startupFrame: number | null = null;
   private startupCommandTimer: number | null = null;
   private fitTimer: number | null = null;
-  private ptyDataDisposable: IDisposable | null = null;
-  private ptyExitDisposable: IDisposable | null = null;
+  private rendererAddon: { dispose(): void } | null = null;
+  private rendererContextLossDisposable: { dispose(): void } | null = null;
+  private rendererName = "DOM";
+  private backendDataDisposable: BackendDisposable | null = null;
+  private backendExitDisposable: BackendDisposable | null = null;
   private termDataDisposable: { dispose(): void } | null = null;
 
   constructor(
@@ -56,14 +60,19 @@ export class TerminalSession {
     this.containerEl = this.view.sessionsEl.createDiv({ cls: "vin-terminal-session" });
     this.hostEl = this.containerEl.createDiv({ cls: "vin-terminal-host" });
     this.statusEl = this.containerEl.createDiv({ cls: "vin-terminal-session-status" });
+    const ownerWindow = this.containerEl.ownerDocument.defaultView;
+    if (!ownerWindow) {
+      throw new Error("The terminal document has no window.");
+    }
     this.setStatus(`Starting ${this.name}...`);
     let terminal: Terminal | undefined;
+    let backend: TerminalBackend | undefined;
     try {
       terminal = new Terminal({
         allowTransparency: false,
         convertEol: true,
         cursorBlink: this.plugin.settings.cursorBlink,
-        customGlyphs: false,
+        customGlyphs: true,
         fontFamily: getTerminalFontFamily(),
         fontSize: this.plugin.settings.fontSize,
         fontWeight: "400",
@@ -78,40 +87,35 @@ export class TerminalSession {
       this.term = terminal;
       this.term.loadAddon(this.fitAddon);
       this.term.open(this.hostEl);
+      this.initializeRenderer();
 
-      const nodePty = loadNodePty(this.plugin);
-
-      this.ptyProcess = nodePty.spawn(this.plugin.settings.shellPath, parseArgs(this.plugin.settings.shellArgs), {
-        cols: 80,
-        cwd: this.cwd,
-        env: {
-          ...process.env,
-          TERM: "xterm-256color",
-        },
-        name: "xterm-color",
-        rows: 24,
-        ...(process.platform === "win32"
-          ? {
-              // Obsidian's renderer can reject worker_threads-backed ConPTY.
-              // Force winpty on Windows to avoid startup failure inside Electron.
-              useConpty: false,
-            }
-          : {}),
-      });
+      backend = createTerminalBackend(this.plugin, this.plugin.settings.backend, this.cwd);
+      this.backend = backend;
+      if (backend.isPty) {
+        this.setStatus(`Starting ${this.name} (${backend.name})...`);
+      } else {
+        this.setStatus(`Pipe mode: no PTY; full-screen apps may not render correctly.`);
+        this.plugin.recordDiagnostic({
+          level: "warning",
+          scope: "backend-selected",
+          summary: `${this.name} is using ${backend.name}. Full-screen terminal apps may not render correctly.`,
+          detail: "Install the platform-specific native bundle from the GitHub release for real PTY support.",
+        });
+      }
 
       this.citationAutocomplete = new FileCitationAutocomplete(
         this.plugin.app,
         this.term,
-        (data) => this.ptyProcess.write(data),
+        (data) => this.backend.write(data),
         this.containerEl,
       );
 
       this.termDataDisposable = this.term.onData((data) => {
         this.citationAutocomplete.handleData(data);
-        this.ptyProcess.write(data);
+        this.backend.write(data);
       });
 
-      this.ptyDataDisposable = this.ptyProcess.onData((data) => {
+      this.backendDataDisposable = this.backend.onData((data) => {
         if (!this.hasReceivedOutput) {
           this.hasReceivedOutput = true;
           this.clearStartupWarningTimer();
@@ -125,7 +129,7 @@ export class TerminalSession {
         }
       });
 
-      this.ptyExitDisposable = this.ptyProcess.onExit(({ exitCode }) => {
+      this.backendExitDisposable = this.backend.onExit(({ exitCode }) => {
         if (this.disposed) {
           return;
         }
@@ -138,6 +142,7 @@ export class TerminalSession {
             summary: `${this.name} exited with code ${exitCode}.`,
             detail: formatDiagnosticContext({
               profile: this.profileId,
+              backend: this.backend.name,
               shellPath: this.plugin.settings.shellPath,
               shellArgs: this.plugin.settings.shellArgs,
               cwd: this.cwd,
@@ -148,7 +153,7 @@ export class TerminalSession {
       });
 
       this.installDropHandlers();
-      this.startupWarningTimer = window.setTimeout(() => {
+      this.startupWarningTimer = ownerWindow.setTimeout(() => {
         if (this.disposed || this.hasReceivedOutput) {
           return;
         }
@@ -160,7 +165,8 @@ export class TerminalSession {
           summary: `${this.name} started but has not produced output yet.`,
           context: {
             profile: this.profileId,
-            pid: String(this.ptyProcess.pid),
+            pid: String(this.backend.pid),
+            backend: this.backend.name,
             shellPath: this.plugin.settings.shellPath,
             shellArgs: this.plugin.settings.shellArgs,
             cwd: this.cwd,
@@ -169,7 +175,7 @@ export class TerminalSession {
         });
       }, 2200);
 
-      this.startupFrame = requestAnimationFrame(() => {
+      this.startupFrame = ownerWindow.requestAnimationFrame(() => {
         this.startupFrame = null;
         if (this.disposed) return;
         this.fit();
@@ -179,7 +185,7 @@ export class TerminalSession {
           ...this.startupCommand.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
         ];
         if (startupLines.length) {
-          this.startupCommandTimer = window.setTimeout(() => {
+          this.startupCommandTimer = ownerWindow.setTimeout(() => {
             this.startupCommandTimer = null;
             if (this.disposed) return;
             for (const line of startupLines) {
@@ -189,7 +195,7 @@ export class TerminalSession {
         }
       });
 
-      this.fitTimer = window.setTimeout(() => {
+      this.fitTimer = ownerWindow.setTimeout(() => {
         this.fitTimer = null;
         if (!this.disposed) {
           this.fit();
@@ -197,6 +203,7 @@ export class TerminalSession {
       }, 180);
     } catch (error) {
       this.clearStartupWarningTimer();
+      backend?.dispose();
       terminal?.dispose();
       this.containerEl.remove();
       throw error;
@@ -235,9 +242,12 @@ export class TerminalSession {
       return;
     }
 
+    const previousCols = this.term.cols;
+    const previousRows = this.term.rows;
     this.fitAddon.fit();
-    this.ptyProcess.resize(this.term.cols, this.term.rows);
-    this.term.refresh(0, this.term.rows - 1);
+    if (this.term.cols !== previousCols || this.term.rows !== previousRows) {
+      this.backend.resize(this.term.cols, this.term.rows);
+    }
   }
 
   show(): void {
@@ -254,7 +264,7 @@ export class TerminalSession {
     this.term.options.theme = getTerminalTheme(this.containerEl);
     this.term.options.fontSize = this.plugin.settings.fontSize;
     this.term.options.cursorBlink = this.plugin.settings.cursorBlink;
-    this.fit();
+    this.term.clearTextureAtlas();
   }
 
   sendText(text: string, appendEnter = true): void {
@@ -263,7 +273,7 @@ export class TerminalSession {
     }
 
     if (this.disposed) return;
-    this.ptyProcess.write(appendEnter ? `${text}\r` : text);
+    this.backend.write(appendEnter ? `${text}\r` : text);
     this.focus();
   }
 
@@ -334,15 +344,18 @@ export class TerminalSession {
 
     this.disposed = true;
     this.clearStartupWarningTimer();
-    if (this.startupFrame !== null) cancelAnimationFrame(this.startupFrame);
-    if (this.startupCommandTimer !== null) window.clearTimeout(this.startupCommandTimer);
-    if (this.fitTimer !== null) window.clearTimeout(this.fitTimer);
-    this.ptyDataDisposable?.dispose();
-    this.ptyExitDisposable?.dispose();
+    const view = this.containerEl.ownerDocument.defaultView;
+    if (this.startupFrame !== null) view?.cancelAnimationFrame(this.startupFrame);
+    if (this.startupCommandTimer !== null) view?.clearTimeout(this.startupCommandTimer);
+    if (this.fitTimer !== null) view?.clearTimeout(this.fitTimer);
+    this.backendDataDisposable?.dispose();
+    this.backendExitDisposable?.dispose();
     this.termDataDisposable?.dispose();
     this.citationAutocomplete.destroy();
+    this.rendererContextLossDisposable?.dispose();
+    this.rendererAddon?.dispose();
     try {
-      this.ptyProcess.kill();
+      this.backend.dispose();
     } catch {
       // The process may have exited between the disposed check and kill.
     }
@@ -358,8 +371,54 @@ export class TerminalSession {
 
   private clearStartupWarningTimer(): void {
     if (this.startupWarningTimer !== null) {
-      window.clearTimeout(this.startupWarningTimer);
+      this.containerEl.ownerDocument.defaultView?.clearTimeout(this.startupWarningTimer);
       this.startupWarningTimer = null;
     }
+  }
+
+  private initializeRenderer(): void {
+    this.rendererContextLossDisposable?.dispose();
+    this.rendererContextLossDisposable = null;
+    this.rendererAddon?.dispose();
+    this.rendererAddon = null;
+    this.rendererName = "DOM";
+
+    let webglAddon: WebglAddon | null = null;
+    try {
+      const addon = new WebglAddon();
+      webglAddon = addon;
+      this.term.loadAddon(addon);
+      this.rendererAddon = addon;
+      this.rendererName = "WebGL";
+      this.rendererContextLossDisposable = addon.onContextLoss(() => this.handleRendererContextLoss());
+    } catch (webglError) {
+      webglAddon?.dispose();
+      this.rendererAddon = null;
+      this.plugin.recordDiagnostic({
+        level: "warning",
+        scope: "renderer",
+        summary: `${this.name} is using the DOM renderer.`,
+        detail: `WebGL renderer was unavailable. ${String(webglError)}`,
+      });
+    }
+
+    this.plugin.recordDiagnostic({
+      level: "info",
+      scope: "renderer",
+      summary: `${this.name} is using the ${this.rendererName} renderer.`,
+    });
+  }
+
+  private handleRendererContextLoss(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.plugin.recordDiagnostic({
+      level: "warning",
+      scope: "renderer",
+      summary: `${this.name} lost its accelerated renderer; restoring the terminal buffer.`,
+    });
+    this.initializeRenderer();
+    this.term.refresh(0, this.term.rows - 1);
   }
 }

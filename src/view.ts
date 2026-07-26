@@ -330,7 +330,6 @@ export class TerminalView extends ItemView {
     }
 
     this.tabBarEl.empty();
-    this.rootEl.toggleClass("has-sessions", this.sessions.length > 0);
     const tabsScroll = this.tabBarEl.createDiv({ cls: "vin-terminal-tabs-scroll" });
 
     for (const session of this.sessions) {

@@ -115,6 +115,12 @@ npm install
 npm run build
 ```
 
+For a type-only check without writing JavaScript files:
+
+```bash
+npm run typecheck
+```
+
 ### 3. Watch mode
 
 ```bash
@@ -170,7 +176,7 @@ This opens a picker of notes from your vault and inserts a wiki-style path refer
 
 The plugin settings include:
 
-- shell executable
+- shell executable (PowerShell on Windows, or `$SHELL` with a POSIX fallback elsewhere)
 - shell arguments
 - default working directory
 - font size
@@ -186,6 +192,13 @@ npm run build
 ```
 
 Then package the installable plugin folder or zip:
+
+```bash
+npm run package:release
+```
+
+The packaging script uses PowerShell on Windows and `zip` on POSIX systems.
+If neither archive mechanism is available, it reports the required dependency.
 
 - `manifest.json`
 - `main.js`
@@ -230,4 +243,3 @@ If `node-pty` fails to load:
 
 - verify that `node_modules/node-pty/` exists in the installed plugin folder
 - reinstall or replace the packaged plugin files instead of copying only `main.js`
-

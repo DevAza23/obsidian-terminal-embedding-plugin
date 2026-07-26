@@ -6,6 +6,7 @@ THIS IS A GENERATED BUNDLE. RUN \`npm run build\` TO REBUILD.
 */
 `;
 
+const watch = process.argv.includes("--watch");
 const ctx = await esbuild.context({
 	banner: {
 		js: banner,
@@ -17,11 +18,11 @@ const ctx = await esbuild.context({
 	logLevel: "info",
 	outfile: "main.js",
 	platform: "node",
-	sourcemap: "inline",
+	sourcemap: watch ? "inline" : false,
 	target: "node18",
 });
 
-if (process.argv.includes("--watch")) {
+if (watch) {
 	await ctx.watch();
 } else {
 	await ctx.rebuild();

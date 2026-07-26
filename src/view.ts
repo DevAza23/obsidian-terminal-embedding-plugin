@@ -25,7 +25,9 @@ export class TerminalView extends ItemView {
   private diagnosticsEl!: HTMLElement;
   private pendingState: ViewStatePayload | null = null;
   private opened = false;
-  private isRenaming = false;
+  private renamingSession: TerminalSession | null = null;
+  private renameInput: HTMLInputElement | null = null;
+  private renameValue: string | null = null;
   private unsubscribeDiagnostics: (() => void) | null = null;
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: EmbeddedAiTerminalPlugin) {
@@ -325,10 +327,18 @@ export class TerminalView extends ItemView {
   }
 
   renderTabs(): void {
-    if (!this.tabBarEl || this.isRenaming) {
+    if (!this.tabBarEl) {
       return;
     }
 
+    if (this.renamingSession && !this.sessions.includes(this.renamingSession)) {
+      this.renamingSession = null;
+      this.renameInput = null;
+      this.renameValue = null;
+    }
+    if (this.renamingSession && this.renameInput) {
+      this.renameValue = this.renameInput.value;
+    }
     this.tabBarEl.empty();
     const tabsScroll = this.tabBarEl.createDiv({ cls: "vin-terminal-tabs-scroll" });
 
@@ -341,13 +351,15 @@ export class TerminalView extends ItemView {
         tab.addClass("has-activity");
       }
 
-      const label = tab.createSpan({ cls: "vin-terminal-tab-label", text: session.name });
+      const label = this.renamingSession === session
+        ? this.createRenameInput(tab, session)
+        : tab.createSpan({ cls: "vin-terminal-tab-label", text: session.name });
       tab.addEventListener("click", () => this.switchTo(session));
-      tab.addEventListener("dblclick", () => this.startRename(tab, label, session));
+      tab.addEventListener("dblclick", () => this.startRename(session));
       tab.addEventListener("contextmenu", (event) => {
         event.preventDefault();
         const menu = new Menu();
-        menu.addItem((item) => item.setTitle("Rename").setIcon("pencil").onClick(() => this.startRename(tab, label, session)));
+        menu.addItem((item) => item.setTitle("Rename").setIcon("pencil").onClick(() => this.startRename(session)));
         menu.addItem((item) => item.setTitle("Close").setIcon("x").onClick(() => this.closeSession(session)));
         menu.showAtMouseEvent(event);
       });
@@ -363,46 +375,69 @@ export class TerminalView extends ItemView {
     help.addEventListener("click", () => new TerminalHelpModal(this.app).open());
   }
 
-  private startRename(tab: HTMLElement, labelEl: HTMLElement, session: TerminalSession): void {
-    if (this.isRenaming) {
+  private startRename(session: TerminalSession): void {
+    this.renamingSession = session;
+    this.renameValue = session.name;
+    this.renderTabs();
+    const input = this.renameInput;
+    if (!input) {
       return;
     }
+    const ownerWindow = this.contentEl.ownerDocument.defaultView;
+    ownerWindow?.setTimeout(() => {
+      if (this.renameInput !== input) {
+        return;
+      }
+      input.focus();
+      input.select();
+    }, 0);
+  }
 
-    this.isRenaming = true;
+  private createRenameInput(tab: HTMLElement, session: TerminalSession): HTMLInputElement {
     const input = this.contentEl.ownerDocument.createElement("input");
     input.type = "text";
     input.className = "vin-terminal-tab-rename";
-    input.value = session.name;
+    input.value = this.renameValue ?? session.name;
     input.style.setProperty("--vin-terminal-rename-width", `${Math.max(5, session.name.length + 1)}ch`);
-    labelEl.replaceWith(input);
-
-    const finish = (save: boolean): void => {
-      if (!this.isRenaming) {
-        return;
-      }
-
-      this.isRenaming = false;
-      if (save) {
-        session.rename(input.value);
-      }
-      this.renderTabs();
-      this.plugin.requestLayoutSave();
-    };
-
+    this.renameInput = input;
     input.addEventListener("input", () => {
+      this.renameValue = input.value;
       input.style.setProperty("--vin-terminal-rename-width", `${Math.max(5, input.value.length + 1)}ch`);
     });
     input.addEventListener("keydown", (event) => {
       event.stopPropagation();
       if (event.key === "Enter") {
-        finish(true);
+        this.finishRename(true);
       } else if (event.key === "Escape") {
-        finish(false);
+        this.finishRename(false);
       }
     });
-    input.addEventListener("blur", () => finish(true));
-    input.focus();
-    input.select();
+    input.addEventListener("blur", () => {
+      this.contentEl.ownerDocument.defaultView?.setTimeout(() => {
+        if (this.renameInput === input && this.contentEl.ownerDocument.activeElement !== input) {
+          this.finishRename(true);
+        }
+      }, 0);
+    });
+    tab.appendChild(input);
+    return input;
+  }
+
+  private finishRename(save: boolean): void {
+    const session = this.renamingSession;
+    if (!session) {
+      return;
+    }
+    const input = this.renameInput;
+    const value = this.renameValue ?? input?.value ?? session.name;
+    this.renamingSession = null;
+    this.renameInput = null;
+    this.renameValue = null;
+    if (save) {
+      session.rename(value);
+    }
+    this.renderTabs();
+    this.plugin.requestLayoutSave();
   }
 
   private restoreState(): void {

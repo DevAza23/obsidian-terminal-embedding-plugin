@@ -8,6 +8,7 @@ export class FileCitationAutocomplete {
   private results: TFile[] = [];
   private selectedIndex = 0;
   private lastCharWasBracket = false;
+  private suppressActivation = false;
   private dropdownEl: HTMLElement | null = null;
   private renderFrame: number | null = null;
   private cachedFiles: CitationFile[] | null = null;
@@ -62,13 +63,35 @@ export class FileCitationAutocomplete {
         return false;
       }
 
-      this.dismiss();
+      this.dismiss(true);
       return true;
     });
   }
 
   handleData(data: string): void {
     if (this.active) return;
+    if (this.suppressActivation) {
+      if (data.length > 1) {
+        if (data.includes("[[")) {
+          this.suppressActivation = false;
+          this.activate();
+        }
+        this.lastCharWasBracket = data.endsWith("[");
+        return;
+      }
+      if (data === "[") {
+        if (this.lastCharWasBracket) {
+          this.suppressActivation = false;
+          this.lastCharWasBracket = false;
+          this.activate();
+        } else {
+          this.lastCharWasBracket = true;
+        }
+      } else {
+        this.lastCharWasBracket = false;
+      }
+      return;
+    }
     if (data.length > 1) {
       if (data.includes("[[")) this.activate();
       this.lastCharWasBracket = data.endsWith("[");
@@ -96,14 +119,16 @@ export class FileCitationAutocomplete {
 
   private activate(): void {
     this.active = true;
+    this.suppressActivation = false;
     this.query = "";
     this.selectedIndex = 0;
     this.cachedFiles = this.getFiles();
     this.updateResults();
   }
 
-  private dismiss(): void {
+  private dismiss(suppressActivation = false): void {
     if (this.query) this.writeToShell(this.query);
+    this.suppressActivation = suppressActivation;
     this.deactivate();
   }
 

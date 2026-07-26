@@ -46,6 +46,7 @@ interface NodePtyProcess {
 }
 
 const PYTHON_PTY_HELPER = String.raw`import errno
+import ctypes
 import fcntl
 import json
 import os
@@ -80,6 +81,12 @@ def main():
     if (os.path.isabs(shell) and not os.access(shell, os.X_OK)) or (not os.path.isabs(shell) and shutil.which(shell) is None):
         print(f"__VIN_SHELL_START_ERROR__:Shell executable '{shell}' could not be found or is not executable.", file=sys.stderr, flush=True)
         return 1
+    try:
+        ctypes.CDLL(None).prctl(1, signal.SIGTERM)
+        if os.getppid() == 1:
+            return 1
+    except (AttributeError, OSError):
+        pass
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(cwd)
@@ -221,6 +228,7 @@ class ChildProcessBackend implements TerminalBackend {
   private readonly stdoutDecoder = new TextDecoder("utf-8");
   private readonly stderrDecoder = new TextDecoder("utf-8");
   private readonly forwardStderr: boolean;
+  private readonly killProcessGroup: boolean;
   private stderrDetail = "";
   private exited = false;
 
@@ -229,9 +237,11 @@ class ChildProcessBackend implements TerminalBackend {
     readonly name: string,
     isPty: boolean,
     forwardStderr = true,
+    killProcessGroup = false,
   ) {
     this.isPty = isPty;
     this.forwardStderr = forwardStderr;
+    this.killProcessGroup = killProcessGroup;
     this.process.stdout.on("data", (data: Buffer) => this.emitData(this.stdoutDecoder.decode(data, { stream: true })));
     this.process.stderr.on("data", (data: Buffer) => {
       const text = this.stderrDecoder.decode(data, { stream: true });
@@ -302,7 +312,11 @@ class ChildProcessBackend implements TerminalBackend {
       return;
     }
     try {
-      this.process.kill();
+      if (this.killProcessGroup && process.platform !== "win32" && this.process.pid) {
+        process.kill(-this.process.pid, "SIGTERM");
+      } else {
+        this.process.kill();
+      }
     } catch {
       // The process may already have exited.
     }
@@ -330,7 +344,7 @@ class ChildProcessBackend implements TerminalBackend {
 
 class PythonPtyBackend extends ChildProcessBackend {
   constructor(process: ChildProcessWithoutNullStreams) {
-    super(process, "Python PTY", true, false);
+    super(process, "Python PTY", true, false, true);
   }
 
   override write(data: string): void {
@@ -490,6 +504,7 @@ function spawnPythonBackend(plugin: EmbeddedAiTerminalPlugin, cwd: string): Term
     ["-u", helperPath, plugin.settings.shellPath, JSON.stringify(parseArgs(plugin.settings.shellArgs)), cwd, "80", "24"],
     {
       cwd,
+      detached: true,
       env: { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" },
       stdio: ["pipe", "pipe", "pipe"],
     },
